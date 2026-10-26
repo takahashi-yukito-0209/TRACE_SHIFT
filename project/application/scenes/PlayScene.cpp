@@ -34,22 +34,14 @@ constexpr bool kLoadEnvironmentMapOnStartup = false; // 遷移直後に環境マ
 constexpr const char* kFenceModelKeyword = "fence"; // アルファ抜き設定を適用するモデル判定キーワード
 constexpr const char* kCubeModelKeywordLower = "cube"; // cubeモデル判定用の小文字キーワード
 constexpr const char* kCubeModelKeywordUpper = "Cube"; // cubeモデル判定用の大文字キーワード
-constexpr const char* kDefaultLevelDataFileName = "levels/scene.json"; // 起動時に読み込むレベルJSON
+constexpr const char* kDefaultLevelDataFileName = "levels/scene.json"; // 旧レベル編集で既定とするJSON
 constexpr const char* kDefaultLevelSaveFileName = "levels/scene.json"; // ImGuiから書き出すレベルJSON
-
-struct SceneModelLoadDesc {
-    const char* fileName; // モデルファイル名
-    bool loadOnStartup; // PlayScene遷移直後に読み込むか
-};
 
 struct PostProcessShortcutDesc {
     uint8_t key; // 切り替えに使用するDirectInputキー
     PostEffectType effectType; // キーに対応するポストエフェクト種別
 };
 
-constexpr std::array<SceneModelLoadDesc, 1> kSceneModelLoadDescs = {
-    SceneModelLoadDesc { "block/block.obj", true },
-}; // シーンで扱うモデルと起動時ロード設定
 constexpr std::array<PostProcessShortcutDesc, 11> kPostProcessShortcutDescs = {
     PostProcessShortcutDesc { DIK_0, PostEffectType::Copy },
     PostProcessShortcutDesc { DIK_1, PostEffectType::Grayscale },
@@ -94,11 +86,7 @@ constexpr const char* kEnvironmentMapTextureName = "rostock_laage_airport_4k.dds
 constexpr const char* kCircleTextureName = "circle.png"; // 円形パーティクルに使用するテクスチャ名
 constexpr const char* kCircleFlashTextureName = "circle2.png"; // 発光系スプライトに使用するテクスチャ名
 constexpr const char* kGradationLineTextureName = "gradationLine.png"; // リングと円柱に使用するテクスチャ名
-constexpr const char* kUvCheckerTextureName = "uvChecker.png"; // 確認用UVテクスチャ名
-constexpr const char* kMonsterBallTextureName = "monsterBall.png"; // 確認用ボールテクスチャ名
-constexpr std::array<const char*, 5> kSceneTextureNames = {
-    kUvCheckerTextureName,
-    kMonsterBallTextureName,
+constexpr std::array<const char*, 3> kSceneTextureNames = {
     kCircleTextureName,
     kGradationLineTextureName,
     kEnvironmentMapTextureName,
@@ -900,29 +888,6 @@ bool PlayScene::ReloadLevelSceneObjects()
 }
 
 /// <summary>
-/// シーンで使用する3Dオブジェクトを初期化する。
-/// </summary>
-void PlayScene::InitializeSceneObjects()
-{
-    levelDataFileName_ = ResolveEditableLevelFilePath(kDefaultLevelDataFileName);
-    levelSaveFileName_ = levelDataFileName_;
-    if (ReloadLevelSceneObjects()) {
-        return;
-    }
-
-    objects3d_.reserve(kSceneModelLoadDescs.size());
-    for (const SceneModelLoadDesc& modelDesc : kSceneModelLoadDescs) {
-        auto object3d = std::make_unique<Object3d>(); // 作成中の3Dオブジェクト
-        object3d->SetObjectId(IssueObjectId());
-        object3d->Initialize(ctx_.object3dCommon, ctx_.imguiManager);
-        object3d->SetModel(modelDesc.fileName);
-        ApplySceneObjectInitialSettings(*object3d, modelDesc.fileName);
-        objects3d_.push_back(std::move(object3d));
-    }
-    RebuildObjectPointerView();
-}
-
-/// <summary>
 /// シーンで使用するテクスチャを読み込む。
 /// </summary>
 void PlayScene::LoadSceneTextures()
@@ -963,16 +928,21 @@ void PlayScene::InitializeSkyBox()
     }
 }
 
+/// <summary>
+/// 現在のゲームで使用するステージと演出を初期化する。
+/// </summary>
 void PlayScene::Initialize(const SceneContext& ctx)
 {
     ctx_ = ctx;
     levelEditorImGuiState_ = {};
     objectEditorState_ = {};
     lastAutoOpenedStageObjectIndex_ = -1;
+    // 旧レベル編集用のパスだけ保持し、検証配置は起動時に読み込まない。
+    levelDataFileName_ = ResolveEditableLevelFilePath(kDefaultLevelDataFileName);
+    levelSaveFileName_ = levelDataFileName_;
 
     LoadSceneTextures();
     InitializeSkyBox();
-    InitializeSceneObjects();
     InitializePastSelfTutorial();
     if (stageSelection_) {
         const std::array<PastSelfTutorialRoute, GameApp::kSelectableStageCount> routes {

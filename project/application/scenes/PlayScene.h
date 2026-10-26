@@ -932,11 +932,6 @@ private:
     void DeleteSceneSprite(size_t spriteIndex);
 
     /// <summary>
-    /// シーンで使用する3Dオブジェクトを初期化する。
-    /// </summary>
-    void InitializeSceneObjects();
-
-    /// <summary>
     /// 現在の3DオブジェクトをクリアしてレベルJSONから作り直す。
     /// </summary>
     bool ReloadLevelSceneObjects();
