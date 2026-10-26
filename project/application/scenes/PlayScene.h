@@ -13,6 +13,7 @@
 #include "../player/Player.h"
 #include "StageRuleSettings.h"
 #include "ClonePlatformCourseState.h"
+#include "StageStartSequenceState.h"
 #include "TraceShiftStageJson.h"
 #include "PlaySceneEditorState.h"
 #include "PastSelfTutorialState.h"
@@ -142,11 +143,44 @@ public: // メンバ関数
 
 private:
     std::shared_ptr<GameApp::StageSelectionState> stageSelection_; // 選択画面と共有する起動中の攻略履歴
+    std::unique_ptr<MyEngine::Sprite> stageIntroSprite_; // ステージ開始時に短く表示する番号とテーマ
+    std::unique_ptr<MyEngine::Sprite> stageOverlayBackground_; // 開始文字の背景となる上部の帯
+    StageStartSequenceState stageStartSequence_; // 表示・音・光・操作解禁で共有する演出時間
+    std::unique_ptr<MyEngine::Object3d> stageStartRing_; // 操作解禁時に足元へ広がる表示専用リング
+    std::unique_ptr<MyEngine::Object3d> stageStartBody_; // 出現中だけ本体に代えて表示する実体化用モデル
+    std::unique_ptr<MyEngine::Sprite> stageStartDim_; // 出現開始から通常の明るさへ戻す画面の薄暗幕
+    std::shared_ptr<MyEngine::SoundClip> stageStartSound_; // 全体音量設定に従う短い開始音
+    Math::Vector3 stageStartOrigin_ {}; // 開始時点の足元に固定するリング位置
+
+    /// <summary>
+    /// 選択ステージの開始表示を初期化する。
+    /// </summary>
+    void InitializeStageSelectionOverlay();
+
+    /// <summary>
+    /// 初回または短いリトライの開始演出と、光の発生位置を設定する。
+    /// </summary>
+    void BeginStageStartPresentation(bool retry);
+
+    /// <summary>
+    /// 開始演出を進め、操作解禁と同じ更新で開始音を一度再生する。
+    /// </summary>
+    void UpdateStageStartPresentation(float deltaTime);
+
+    /// <summary>
+    /// 実体化する本体と開始リングの描画状態を更新する。
+    /// </summary>
+    void UpdateStageStartPresentationVisuals();
 
     /// <summary>
     /// 提出用の到達判定を検出し、クリア履歴を記録せずタイトルへ戻す。
     /// </summary>
     bool HandleStageCompletion();
+
+    /// <summary>
+    /// 開始時の文字をゲーム画面へ重ねる。
+    /// </summary>
+    void DrawStageSelectionOverlay();
 
     /// <summary>
     /// 分身チュートリアル用のステージブロック。

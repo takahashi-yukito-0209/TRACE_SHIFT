@@ -11,6 +11,7 @@
 #include "../../engine/particle/ParticleManager.h"
 #include "../../engine/particle/ParticleEmitter.h"
 #include "../../engine/utility/mathUtility.h"
+#include "../../engine/sound/Sound.h"
 #include <algorithm>
 #include <cmath>
 #include <string>
@@ -544,6 +545,14 @@ void PlayScene::DrawWorldAndParticles()
         ctx_.object3dCommon->SetCommonDrawSetting();
         DrawSceneObjects();
         DrawPastSelfTutorial();
+        if (stageStartRing_ && (stageStartSequence_.IsHolding() || stageStartSequence_.IsPulseVisible())) {
+            const BlendMode previousBlend = ctx_.object3dCommon->GetBlendMode(); // 開始リングより前の合成設定
+            ctx_.object3dCommon->SetBlendMode(BlendMode::Add);
+            ctx_.object3dCommon->SetCommonDrawSetting();
+            stageStartRing_->Draw();
+            ctx_.object3dCommon->SetBlendMode(previousBlend);
+            ctx_.object3dCommon->SetCommonDrawSetting();
+        }
     }
 
     ParticleManager* particleManager = ParticleManager::GetInstance(); // パーティクル描画を担当する管理クラス
@@ -595,6 +604,136 @@ void PlayScene::DrawSprites()
     }
     DrawTemporalAfterimages();
     DrawTimeReversalParticles();
+    if (stageStartDim_ && stageStartSequence_.GetArrivalDimAlpha() > 0.0f && ctx_.directXCommon) {
+        stageStartDim_->SetPosition({ 0.0f, 0.0f });
+        stageStartDim_->SetSize({ ctx_.directXCommon->GetRenderWidth(), ctx_.directXCommon->GetRenderHeight() });
+        stageStartDim_->SetColor({ 0.01f, 0.025f, 0.04f, stageStartSequence_.GetArrivalDimAlpha() });
+        stageStartDim_->Update();
+        stageStartDim_->Draw();
+    }
+    DrawStageSelectionOverlay();
+}
+
+/// <summary>
+/// 選択ステージの開始表示を初期化する。
+/// </summary>
+void PlayScene::InitializeStageSelectionOverlay()
+{
+    if (!stageSelection_ || !ctx_.spriteCommon || !ctx_.textureManager) {
+        return;
+    }
+    const char* detail = GameApp::kStageDetailTextures[stageSelection_->selectedStageIndex]; // 選択ルートの名前と攻略テーマ
+    if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
+        constexpr std::array<const char*, ClonePlatformCourseState::kSectionCount> kSectionTextures {
+            "stage_section_01.png", "stage_section_02.png", "stage_section_03.png",
+        }; // 解法を示さず、区間のテーマと記録リセットを伝える開始表示
+        detail = kSectionTextures[clonePlatformCourseState_.GetSectionIndex()];
+    }
+    ctx_.textureManager->LoadTexture(detail);
+    stageIntroSprite_ = std::make_unique<Sprite>();
+    stageIntroSprite_->Initialize(ctx_.spriteCommon, detail, ctx_.imguiManager);
+    stageOverlayBackground_ = std::make_unique<Sprite>();
+    stageOverlayBackground_->InitializeSolidColor(ctx_.spriteCommon, ctx_.srvManager);
+    stageStartDim_ = std::make_unique<Sprite>();
+    stageStartDim_->InitializeSolidColor(ctx_.spriteCommon, ctx_.srvManager);
+    if (!stageStartRing_ && ctx_.object3dCommon) {
+        stageStartRing_ = std::make_unique<Object3d>();
+        stageStartRing_->Initialize(ctx_.object3dCommon, ctx_.imguiManager);
+        stageStartRing_->SetMesh(PrimitiveFactory::CreateRing(1.0f, 0.91f, 64));
+        stageStartRing_->SetUseTexture(false);
+        stageStartRing_->SetEnableLighting(false);
+        stageStartRing_->SetUseAlphaDiscard(false);
+        stageStartRing_->SetRotate({ 1.57079633f, 0.0f, 0.0f });
+    }
+    if (!stageStartSound_ && ctx_.soundSystem && ctx_.soundSystem->IsReady()) {
+        stageStartSound_ = ctx_.soundSystem->LoadFromFile("sounds/se/stage_start.wav");
+    }
+    BeginStageStartPresentation(false);
+}
+
+/// <summary>
+/// 初回または短いリトライの開始演出と、光の発生位置を設定する。
+/// </summary>
+void PlayScene::BeginStageStartPresentation(bool retry)
+{
+    if (!stageIntroSprite_) {
+        return;
+    }
+    stageStartSequence_.Begin(retry);
+    const PlayerState& state = player_.GetState(); // 開始時の本体の足元を求める状態
+    stageStartOrigin_ = state.transform.translate;
+    stageStartOrigin_.y -= std::fabs(state.transform.scale.y) * 0.5f;
+    stageStartOrigin_.y += 0.03f;
+}
+
+/// <summary>
+/// 開始演出を進め、操作解禁と同じ更新で開始音を一度再生する。
+/// </summary>
+void PlayScene::UpdateStageStartPresentation(float deltaTime)
+{
+    if (stageStartSequence_.Update(deltaTime) && ctx_.soundSystem && stageStartSound_) {
+        ctx_.soundSystem->Play(stageStartSound_);
+    }
+}
+
+/// <summary>
+/// 実体化する本体と開始リングの描画状態を更新する。
+/// </summary>
+void PlayScene::UpdateStageStartPresentationVisuals()
+{
+    if (!stageStartRing_ || !ctx_.camera) {
+        return;
+    }
+    const float progress = stageStartSequence_.GetPulseProgress(); // 操作解禁後の光の進行率
+    const bool holding = stageStartSequence_.IsHolding(); // 待機中は小さく淡い輪にするか
+    const float scale = holding ? 0.65f : 0.65f + progress * 1.4f; // 足元から外へ広がる半径
+    const float alpha = holding ? 0.12f : 0.8f * (1.0f - progress); // 解禁直後を強くし、最後は消す透明度
+    stageStartRing_->SetTranslate(stageStartOrigin_);
+    stageStartRing_->SetScale({ scale, scale, scale });
+    stageStartRing_->SetMaterialColor({ 0.35f, 0.9f, 1.0f, alpha });
+    stageStartRing_->Update(ctx_.camera->GetViewMatrix(), ctx_.camera->GetProjectionMatrix());
+    if (!stageStartSequence_.IsArrivalVisible() || !stageStartBody_) {
+        return;
+    }
+    const PlayerState& state = player_.GetState(); // ゲーム状態を変えず表示だけに使う本体姿勢
+    const float arrival = stageStartSequence_.GetArrivalProgress(); // 本体が実体化する進行率
+    const float eased = arrival * arrival * (3.0f - 2.0f * arrival); // 急な発進と停止を抑える補間率
+    stageStartBody_->SetTranslate(state.transform.translate);
+    stageStartBody_->SetRotate(state.transform.rotate);
+    stageStartBody_->SetScale(state.transform.scale);
+    const float bodyAlpha = 0.12f + 0.88f * eased; // 開始の実体化に使う透明度
+    stageStartBody_->SetMaterialColor({ 0.0f, 0.86f, 1.0f, bodyAlpha });
+    stageStartBody_->Update(ctx_.camera->GetViewMatrix(), ctx_.camera->GetProjectionMatrix());
+}
+
+/// <summary>
+/// 開始時の文字をゲーム画面へ重ねる。
+/// </summary>
+void PlayScene::DrawStageSelectionOverlay()
+{
+    if (!ctx_.directXCommon || !stageSelection_) {
+        return;
+    }
+    const float introAlpha = stageStartSequence_.GetIntroAlpha(); // 初回だけ本文を表示する透明度
+    Sprite* sprite = introAlpha > 0.0f ? stageIntroSprite_.get() : nullptr; // 開始表示中だけ描画する案内文
+    if (!sprite) {
+        return;
+    }
+    const float width = ctx_.directXCommon->GetRenderWidth(); // 表示位置に使う描画幅
+    const float height = ctx_.directXCommon->GetRenderHeight(); // 表示位置に使う描画高さ
+    const float textWidth = (std::min)(width * 0.5f, height * 0.85f); // 名前とテーマを収める文字画像幅
+    const float alpha = introAlpha; // 開始表示のフェードに使う不透明度
+    ctx_.spriteCommon->SetCommonDrawSetting();
+    stageOverlayBackground_->SetPosition({ 0.0f, 0.0f });
+    stageOverlayBackground_->SetSize({ width, height * 0.30f });
+    stageOverlayBackground_->SetColor({ 0.025f, 0.03f, 0.035f, alpha });
+    stageOverlayBackground_->Update();
+    stageOverlayBackground_->Draw();
+    sprite->SetPosition({ width * 0.07f, height * 0.025f });
+    sprite->SetSize({ textWidth, textWidth / 3.0f });
+    sprite->SetColor({ 0.85f, 0.95f, 0.94f, alpha });
+    sprite->Update();
+    sprite->Draw();
 }
 
 /// <summary>

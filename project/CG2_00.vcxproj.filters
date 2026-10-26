@@ -653,6 +653,9 @@
     <ClInclude Include="application\scenes\ClonePlatformCourseState.h">
       <Filter>ヘッダー ファイル\application\scenes</Filter>
     </ClInclude>
+    <ClInclude Include="application\scenes\StageStartSequenceState.h">
+      <Filter>ヘッダー ファイル\application\scenes</Filter>
+    </ClInclude>
     <ClInclude Include="application\player\Player.h">
       <Filter>ヘッダー ファイル\application\player</Filter>
     </ClInclude>

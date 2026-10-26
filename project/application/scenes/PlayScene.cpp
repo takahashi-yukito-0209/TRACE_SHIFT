@@ -988,6 +988,7 @@ void PlayScene::Initialize(const SceneContext& ctx)
     }
     InitializeTemporalEffectSprites();
     InitializePostProcessTargets();
+    InitializeStageSelectionOverlay();
 }
 
 /// <summary>
@@ -995,6 +996,13 @@ void PlayScene::Initialize(const SceneContext& ctx)
 /// </summary>
 void PlayScene::ReleaseSceneObjects()
 {
+    stageIntroSprite_.reset();
+    stageOverlayBackground_.reset();
+    stageStartRing_.reset();
+    stageStartBody_.reset();
+    stageStartDim_.reset();
+    stageStartSound_.reset();
+    stageStartSequence_ = {};
     sprites_.clear();
     spritePointerView_.clear();
     nextSpriteId_ = 1;
@@ -1195,6 +1203,12 @@ void PlayScene::Update(float dt)
         return;
     }
     if (HandleStageCompletion()) {
+        return;
+    }
+    UpdateStageStartPresentation(dt);
+    if (stageStartSequence_.IsHolding()) {
+        UpdatePastSelfTutorialVisuals();
+        UpdateSceneObjects(0.0f);
         return;
     }
     if (!kUsePostEffectPreviewScene) {

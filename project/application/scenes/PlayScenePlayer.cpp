@@ -430,6 +430,10 @@ void PlayScene::InitializePastSelfTutorial()
     ApplyPastSelfTutorialGimmickLayouts();
     pastSelfRecorder_.SetMaxRecordTime(pastSelfTutorialStageRules_.maxRecordTime);
     player_.Initialize(ctx_.object3dCommon, ctx_.imguiManager, kPastSelfTutorialModelFileName);
+    stageStartBody_ = std::make_unique<Object3d>();
+    stageStartBody_->Initialize(ctx_.object3dCommon, ctx_.imguiManager);
+    stageStartBody_->SetModel(kPastSelfTutorialModelFileName);
+    stageStartBody_->SetUseAlphaDiscard(false);
     player_.SetMaterialColor(kPastSelfTutorialNormalPlayerColor);
     PlayerState playerStartState = player_.GetState(); // チュートリアルステージに合わせた開始状態
     playerStartState.transform.translate = kPastSelfTutorialStartTranslate;
@@ -989,6 +993,7 @@ void PlayScene::ResetPastSelfTutorialState()
     ResetPastSelfTutorialMechanics();
     pastSelfTutorialState_.ResetPuzzle();
     RefreshPastSelfTutorialAfterReset();
+    BeginStageStartPresentation(true);
 }
 
 /// <summary>
@@ -1215,6 +1220,10 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
     if (canUndoLastClone && inputManager->IsKeyJustPressed(kCloneUndoKey)) {
         UndoLastPastSelfTutorialClone();
     }
+    if (stageStartSequence_.IsHolding()) {
+        UpdatePastSelfTutorialVisuals();
+        return;
+    }
 
     const bool canAcceptInput = !selectedRouteComplete && !blockInputByImGui; // プレイヤーと分身操作の入力を受け取れるか
     if (canAcceptInput && inputManager) {
@@ -1325,6 +1334,10 @@ void PlayScene::UpdatePastSelfTutorialVisuals()
         return;
     }
 
+    if (pastSelfTutorialAutoCameraFollow_ && stageStartSequence_.IsArrivalVisible()) {
+        const float presentationDistance = pastSelfTutorialCameraDistance_ * stageStartSequence_.GetCameraDistanceScale(); // 通常の追従距離を変更しない開始演出用距離
+        ConfigurePastSelfTutorialCamera(ctx_.camera, pastSelfTutorialCameraFocus_, presentationDistance);
+    }
 
     const Math::Matrix4x4 viewMatrix = ctx_.camera->GetViewMatrix(); // プレイヤー更新に使用するビュー行列
     const Math::Matrix4x4 projectionMatrix = ctx_.camera->GetProjectionMatrix(); // プレイヤー更新に使用する射影行列
@@ -1333,6 +1346,7 @@ void PlayScene::UpdatePastSelfTutorialVisuals()
     UpdatePastSelfTutorialCloneRecordMarkers(viewMatrix, projectionMatrix);
     player_.UpdateObject(viewMatrix, projectionMatrix);
     pastSelfCloneManager_.UpdateObjects(viewMatrix, projectionMatrix);
+    UpdateStageStartPresentationVisuals();
 }
 
 /// <summary>
@@ -1340,6 +1354,9 @@ void PlayScene::UpdatePastSelfTutorialVisuals()
 /// </summary>
 void PlayScene::UpdatePastSelfTutorialStage(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix)
 {
+    const PastSelfTutorialStageBlock* courseGoal = pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics
+        ? GetClonePlatformCourseGoal() : nullptr; // 現在区間の到達床だけに開始時の発光を付ける参照
+    const float goalGlow = stageStartSequence_.GetGoalGlow(); // 停止中に一度明るくして戻す強度
     for (size_t blockIndex = 0; blockIndex < pastSelfTutorialStageBlocks_.size(); ++blockIndex) {
         if (!IsPastSelfTutorialStageBlockEnabled(blockIndex)) {
             continue;
@@ -1352,10 +1369,20 @@ void PlayScene::UpdatePastSelfTutorialStage(const Math::Matrix4x4& viewMatrix, c
                 Math::Vector4 upperGoalColor = oneCloneUpperGoalComplete
                     ? kPastSelfTutorialGoalClearColor
                     : stageBlock.baseColor; // 1体用上段の攻略状態を示す表示色
+                if (&stageBlock == courseGoal && !oneCloneUpperGoalComplete) {
+                    upperGoalColor.x += (1.0f - upperGoalColor.x) * goalGlow;
+                    upperGoalColor.y += (1.0f - upperGoalColor.y) * goalGlow;
+                    upperGoalColor.z += (1.0f - upperGoalColor.z) * goalGlow;
+                }
                 stageBlock.object->SetMaterialColor(upperGoalColor);
             } else if (stageBlock.goalMarker) {
                 Math::Vector4 goalColor = pastSelfTutorialState_.gimmicks.goalReached
                     ? kPastSelfTutorialGoalClearColor : stageBlock.baseColor; // 最終ルートの通常色または達成色
+                if (!pastSelfTutorialState_.gimmicks.goalReached) {
+                    goalColor.x += (1.0f - goalColor.x) * goalGlow;
+                    goalColor.y += (1.0f - goalColor.y) * goalGlow;
+                    goalColor.z += (1.0f - goalColor.z) * goalGlow;
+                }
                 stageBlock.object->SetMaterialColor(goalColor);
             }
             stageBlock.object->Update(viewMatrix, projectionMatrix);
@@ -1564,6 +1591,7 @@ void PlayScene::UpdateClonePlatformCourse()
     player_.SetInitialState(startState);
     ResetPastSelfTutorialState();
     pastSelfTutorialState_.progress.elapsedTime = elapsedTime;
+    InitializeStageSelectionOverlay();
     RegisterPastSelfTutorialCheckCompleted("Section complete; records cleared for the next section");
 }
 
@@ -1719,7 +1747,16 @@ void PlayScene::DrawPastSelfTutorial()
     DrawPastSelfTutorialMechanics();
     DrawPastSelfTutorialCloneRecordMarkers();
     pastSelfCloneManager_.Draw();
-    player_.Draw();
+    if (stageStartSequence_.IsArrivalVisible() && stageStartBody_ && ctx_.object3dCommon) {
+        const BlendMode previousBlend = ctx_.object3dCommon->GetBlendMode(); // 出現表示の前の合成設定
+        ctx_.object3dCommon->SetBlendMode(BlendMode::Alpha);
+        ctx_.object3dCommon->SetCommonDrawSetting();
+        stageStartBody_->Draw();
+        ctx_.object3dCommon->SetBlendMode(previousBlend);
+        ctx_.object3dCommon->SetCommonDrawSetting();
+    } else {
+        player_.Draw();
+    }
 }
 
 /// <summary>
