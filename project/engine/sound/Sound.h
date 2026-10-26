@@ -69,6 +69,16 @@ public: // メンバ関数
     bool IsReady() const { return xaudio2_.Get() != nullptr && masteringVoice_ != nullptr; }
 
     /// <summary>
+    /// 全体音量を0から1の範囲で設定し、再生中の音声にも反映する。
+    /// </summary>
+    bool SetMasterVolume(float volume);
+
+    /// <summary>
+    /// 現在の全体音量を取得する。
+    /// </summary>
+    float GetMasterVolume() const { return masterVolume_; }
+
+    /// <summary>
     /// 指定されたファイルパスからサウンドを読み込む。WAV 形式は LoadWav、MP3 などの圧縮フォーマットは LoadViaMediaFoundation を内部で呼び分け
     /// </summary>
     std::shared_ptr<SoundClip> LoadFromFile(const std::string& path);
@@ -99,6 +109,7 @@ private: // メンバ変数
     Microsoft::WRL::ComPtr<IXAudio2> xaudio2_;
     IXAudio2MasteringVoice* masteringVoice_ = nullptr;
     bool mediaFoundationStarted_ = false; // Media Foundationの開始状態
+    float masterVolume_ = 1.0f; // 再初期化とシーン切り替え後も維持する全体音量
 
     // 再生中コンテキストの管理
     // 再生中コンテキスト: IXAudio2VoiceCallback を実装し、再生終了をフラグで通知する
