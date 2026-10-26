@@ -6,6 +6,7 @@
 #include "../utility/ResourceResolver.h"
 #include "Logger.h"
 #include "TextureManager.h"
+#include "../base/SrvManager.h"
 #include "mathUtility.h"
 #include <cstddef>
 #include <cstdio>
@@ -14,6 +15,8 @@ using namespace MyEngine;
 using namespace Math;
 
 namespace {
+static_assert(offsetof(Sprite::Material, useTexture) == 108, "Sprite material must match the HLSL layout");
+static_assert(sizeof(Sprite::Material) == 128, "Sprite material size must match the HLSL layout");
 constexpr const char* kFallbackTexturePath = "resources/uvChecker.png"; // 読み込み失敗時に使用するフォールバックテクスチャ
 constexpr const char* kNoTextureLabel = "No Texture"; // ImGui表示用の未設定テクスチャ名
 constexpr float kImGuiPositionStep = 0.1f; // 位置調整の刻み幅
@@ -115,9 +118,18 @@ void Sprite::Initialize(SpriteCommon* spriteCommon, std::string textureFilePath,
     materialData_->uvTransform = MathUtil::MakeIdentity4x4();
     materialData_->lightingMode = 0;
     materialData_->useAlphaCutoutSampler = 0;
+    materialData_->useAlphaDiscard = 0;
+    materialData_->useTexture = textureFilePath.empty() ? 0 : 1;
     materialData_->shininess = 1.0f;
     transformationMatrixData_->WVP = MathUtil::MakeIdentity4x4();
     transformationMatrixData_->World = MathUtil::MakeIdentity4x4();
+    if (textureFilePath.empty()) {
+        textureIndex_ = UINT32_MAX;
+        textureFilePath_.clear();
+        textureSize_ = { 1.0f, 1.0f };
+        size_ = textureSize_;
+        return;
+    }
     // パス指定されたテクスチャをリソースリゾルバで解決してみる
     std::string resolvedTex = ResourceResolver::Resolve(textureFilePath, ResourceResolver::Type::Texture);
     // 無かったらそのままのパスにする
@@ -153,6 +165,26 @@ void Sprite::Initialize(SpriteCommon* spriteCommon, std::string textureFilePath,
     AdjustTextureSize();
     // ImGui表示はImGuiManager側でまとめて扱う
     (void)imguiManager;
+}
+
+/// <summary>
+/// 画像を読み込まず、単色矩形用のnull SRVを生成する。
+/// </summary>
+void Sprite::InitializeSolidColor(SpriteCommon* spriteCommon, SrvManager* srvManager)
+{
+    Initialize(spriteCommon, "");
+    if (!srvManager || !srvManager->CanAllocate()) {
+        Logger::Warn("Sprite::InitializeSolidColor: null SRV allocation failed\n");
+        return;
+    }
+    solidColorSrvManager_ = srvManager;
+    solidColorSrvIndex_ = srvManager->Allocate();
+    D3D12_SHADER_RESOURCE_VIEW_DESC desc {}; // 画像を持たない有効なTexture2Dディスクリプタ
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    desc.Texture2D.MipLevels = 1;
+    spriteCommon->GetDxCommon()->GetDevice()->CreateShaderResourceView(nullptr, &desc, srvManager->GetCPUDescriptorHandle(solidColorSrvIndex_));
 }
 
 /// <summary>
@@ -209,6 +241,9 @@ void Sprite::ReleaseGpuResources()
 
 Sprite::~Sprite()
 {
+    if (solidColorSrvManager_ && solidColorSrvIndex_ != UINT32_MAX) {
+        solidColorSrvManager_->Free(solidColorSrvIndex_);
+    }
     ReleaseGpuResources();
     spriteCommon_ = nullptr;
     // ImGuiへの登録は一元管理しているため、ここでの登録解除は不要
@@ -307,11 +342,15 @@ void Sprite::Update()
     }
 
     // テクスチャUV座標の計算
-    const DirectX::TexMetadata& metadata = TextureManager::GetInstance()->GetMetadata(textureIndex_);
-    float tex_left = textureLeftTop_.x / static_cast<float>(metadata.width);
-    float tex_right = (textureLeftTop_.x + textureSize_.x) / static_cast<float>(metadata.width);
-    float tex_top = textureLeftTop_.y / static_cast<float>(metadata.height);
-    float tex_bottom = (textureLeftTop_.y + textureSize_.y) / static_cast<float>(metadata.height);
+    Vector2 textureDimensions = { 1.0f, 1.0f }; // 単色描画では画像メタデータを参照しないUV基準サイズ
+    if (materialData_->useTexture != 0) {
+        const DirectX::TexMetadata& metadata = TextureManager::GetInstance()->GetMetadata(textureIndex_); // 画像描画時だけ使用するサイズ
+        textureDimensions = { static_cast<float>(metadata.width), static_cast<float>(metadata.height) };
+    }
+    float tex_left = textureLeftTop_.x / textureDimensions.x;
+    float tex_right = (textureLeftTop_.x + textureSize_.x) / textureDimensions.x;
+    float tex_top = textureLeftTop_.y / textureDimensions.y;
+    float tex_bottom = (textureLeftTop_.y + textureSize_.y) / textureDimensions.y;
 
     // 頂点リソースにデータを書き込む
     float tleft = tex_left;
@@ -388,6 +427,9 @@ void Sprite::Update()
 /// </summary>
 void Sprite::Draw()
 {
+    if (materialData_->useTexture == 0 && (!solidColorSrvManager_ || solidColorSrvIndex_ == UINT32_MAX)) {
+        return;
+    }
     UpdateFrameResources();
     // DirectXCommonとコマンドリストの存在確認
     if (!spriteCommon_) {
@@ -443,7 +485,9 @@ void Sprite::Draw()
     dxCommon->GetCommandList()->SetGraphicsRootConstantBufferView(1, transformationMatrixResources_[frameIndex]->GetGPUVirtualAddress());
 
     // SRVのDescriptorTableの先頭を指定（有効なtextureIndex_のときのみ）
-    if (textureIndex_ != UINT32_MAX) {
+    if (materialData_->useTexture == 0 && solidColorSrvManager_ && solidColorSrvIndex_ != UINT32_MAX) {
+        dxCommon->GetCommandList()->SetGraphicsRootDescriptorTable(2, solidColorSrvManager_->GetGPUDescriptorHandle(solidColorSrvIndex_));
+    } else if (textureIndex_ != UINT32_MAX) {
         D3D12_GPU_DESCRIPTOR_HANDLE srv = TextureManager::GetInstance()->GetSrvHandleGPU(textureIndex_);
         // SRVハンドルが有効なときのみバインドする。無効なときは警告を出すが描画は続行する（SRVがないと描画できないわけではないため）
         if (srv.ptr != 0) {
@@ -492,6 +536,7 @@ void Sprite::SetTexture(const std::string& filePath)
 
     // テクスチャと表示サイズを更新する
     textureIndex_ = idx;
+    materialData_->useTexture = 1;
     textureFilePath_ = filePath; // ImGui表示用に指定名を保持
     AdjustTextureSize();
 }
