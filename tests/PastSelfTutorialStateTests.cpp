@@ -48,8 +48,6 @@ PastSelfTutorialState MakeState(uint32_t seed)
     state.gimmicks.weightCloneOn = (NextRandom(seed) & 1u) != 0;
     state.gimmicks.goalBridgeDeployed = (NextRandom(seed) & 1u) != 0;
     state.gimmicks.oneWayGateBlocking = (NextRandom(seed) & 1u) != 0;
-    state.replay.oneCloneToggleActivated = (NextRandom(seed) & 1u) != 0;
-    state.replay.oneCloneElevatorRidden = (NextRandom(seed) & 1u) != 0;
     state.replay.oneCloneBasicsComplete = (NextRandom(seed) & 1u) != 0;
     state.replay.twoCloneReplayPrepared = (NextRandom(seed) & 1u) != 0;
     state.replay.twoCloneSwitchesActivated = (NextRandom(seed) & 1u) != 0;
@@ -104,8 +102,6 @@ bool IsSameState(const PastSelfTutorialState& left, const PastSelfTutorialState&
         && left.gimmicks.weightCloneOn == right.gimmicks.weightCloneOn
         && left.gimmicks.goalBridgeDeployed == right.gimmicks.goalBridgeDeployed
         && left.gimmicks.oneWayGateBlocking == right.gimmicks.oneWayGateBlocking
-        && left.replay.oneCloneToggleActivated == right.replay.oneCloneToggleActivated
-        && left.replay.oneCloneElevatorRidden == right.replay.oneCloneElevatorRidden
         && left.replay.oneCloneBasicsComplete == right.replay.oneCloneBasicsComplete
         && left.replay.twoCloneReplayPrepared == right.replay.twoCloneReplayPrepared
         && left.replay.twoCloneSwitchesActivated == right.replay.twoCloneSwitchesActivated
@@ -158,8 +154,6 @@ void LegacyResetPuzzle(PastSelfTutorialState& state)
     state.gimmicks.toggleSwitchCloneOn = false;
     state.gimmicks.toggleGateOpen = false;
     state.gimmicks.toggleElevatorActive = false;
-    state.replay.oneCloneToggleActivated = false;
-    state.replay.oneCloneElevatorRidden = false;
     state.replay.oneCloneBasicsComplete = false;
     state.replay.twoCloneReplayPrepared = false;
     state.replay.twoCloneSwitchesActivated = false;
@@ -223,8 +217,6 @@ void ExpectedPrepareReplay(PastSelfTutorialState& state, bool registerPrepareAct
     state.gimmicks.toggleSwitchCloneOn = false;
     state.gimmicks.toggleGateOpen = false;
     state.gimmicks.toggleElevatorActive = false;
-    state.replay.oneCloneToggleActivated = false;
-    state.replay.oneCloneElevatorRidden = false;
     state.replay.oneCloneBasicsComplete = false;
     state.replay.twoCloneReplayPrepared = registerPrepareAction &&
         state.progress.recordTakeCount == 2 && cloneCount == 2;
@@ -271,12 +263,8 @@ void CheckStatus(const PastSelfTutorialState& state, size_t cloneCount)
     for (bool completed : flow) { // 各操作項目の達成状態
         flowCount += completed ? 1 : 0;
     }
-    const bool oneStored = state.progress.recordTakeCount == 1 && cloneCount == 1 &&
-        state.progress.recordStopped; // 旧HUDの1体用記録条件
     const bool twoStored = state.progress.recordTakeCount == 2 && cloneCount == 2 &&
         state.progress.recordStopped; // 旧HUDの2体用記録条件
-    const int oneCount = (oneStored ? 1 : 0) + (state.replay.oneCloneToggleActivated ? 1 : 0) +
-        (state.replay.oneCloneElevatorRidden ? 1 : 0) + (state.replay.oneCloneBasicsComplete ? 1 : 0); // 旧HUDの1体達成数
     const int twoCount = (twoStored ? 1 : 0) + (state.replay.twoCloneReplayPrepared ? 1 : 0) +
         (state.replay.twoCloneSwitchesActivated ? 1 : 0) + (state.replay.twoCloneCooperationComplete ? 1 : 0); // 旧HUDの2体達成数
     const bool multiComplete = checkCount == 7 && flowCount == 5 && state.gimmicks.goalReached &&
@@ -285,9 +273,8 @@ void CheckStatus(const PastSelfTutorialState& state, size_t cloneCount)
         actual.allChecksComplete == (checkCount == 7) && actual.videoFlowComplete == (flowCount == 5) &&
         actual.enoughStoredClones == (cloneCount >= 2) && actual.multiCloneRouteComplete == multiComplete,
         "Final challenge status differs from legacy HUD");
-    Check(actual.oneCloneRecordingStored == oneStored && actual.twoCloneRecordingsStored == twoStored &&
-        actual.oneCloneTutorialCheckCount == oneCount && actual.twoCloneTutorialCheckCount == twoCount,
-        "Tutorial recording conditions or counts differ from legacy HUD");
+    Check(actual.twoCloneRecordingsStored == twoStored && actual.twoCloneTutorialCheckCount == twoCount,
+        "Two-clone recording conditions or counts differ from legacy HUD");
     Check(actual.allRoutesComplete == (state.history.oneCloneRouteCleared &&
         state.history.twoCloneRouteCleared && state.history.finalChallengeCleared),
         "Route history summary differs from legacy HUD");
@@ -316,14 +303,13 @@ void TestStatus()
             }
         }
     }
-    for (uint32_t mask = 0; mask < (1u << 10); ++mask) { // 再生進捗と通算履歴の組み合わせ
+    for (uint32_t mask = 0; mask < (1u << 8); ++mask) { // 再生進捗と通算履歴の組み合わせ
         PastSelfTutorialState state; // 再生進捗と通算履歴の組み合わせ
-        bool* flags[] = { &state.replay.oneCloneToggleActivated, &state.replay.oneCloneElevatorRidden,
-            &state.replay.oneCloneBasicsComplete, &state.replay.twoCloneReplayPrepared,
+        bool* flags[] = { &state.replay.oneCloneBasicsComplete, &state.replay.twoCloneReplayPrepared,
             &state.replay.twoCloneSwitchesActivated, &state.replay.twoCloneCooperationComplete,
             &state.history.oneCloneRouteCleared, &state.history.twoCloneRouteCleared,
             &state.history.finalChallengeCleared, &state.progress.recordStopped }; // 各ルートの集計条件
-        for (size_t index = 0; index < 10; ++index) { // 設定する項目番号
+        for (size_t index = 0; index < 8; ++index) { // 設定する項目番号
             *flags[index] = (mask & (1u << index)) != 0;
         }
         for (uint32_t takes = 0; takes <= 3; ++takes) { // 記録回数の境界
@@ -389,7 +375,7 @@ int main()
         Check(first.selectedCreateTextureIndex == 0 && first.selectedDeleteSpriteIndex == 0
             && first.selectedCreateModelIndex == 0 && first.selectedDeleteObjectIndex == 0,
             "Object editor selection reset failed");
-        std::cout << "Tutorial state tests passed: 256 puzzle resets, 2048 replay resets, 147456 HUD summaries\n";
+        std::cout << "Tutorial state tests passed: 256 puzzle resets, 2048 replay resets, 135168 HUD summaries\n";
         return 0;
     } catch (const std::exception& exception) {
         std::cerr << exception.what() << '\n';
