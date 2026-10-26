@@ -43,6 +43,8 @@ struct PostProcessSettings {
     Math::Vector2 radialBlurCenter = { 0.5f, 0.5f }; // 放射状ブラーの中心
     float radialBlurWidth = 0.01f; // 1サンプルごとのUV移動量
     uint32_t radialBlurSampleCount = 10u; // 放射状ブラーのサンプル数
+    float radialBlurScale = 1.0f; // 中心を基準とした画面倍率（1で元の大きさ）
+    float radialBlurGrayscaleAmount = 0.0f; // ブラー後の白黒混合率（0で通常色）
     float dissolveThreshold = 0.0f; // マスクを破棄する閾値
     float dissolveEdgeWidth = 0.03f; // Dissolve境界の幅
     Math::Vector3 dissolveEdgeColor = { 1.0f, 0.4f, 0.3f }; // Dissolve境界の色
@@ -100,6 +102,16 @@ struct PostProcessSettings {
     /// Radial Blurのサンプル数を設定する
     /// </summary>
     void SetRadialBlurSampleCount(uint32_t sampleCount);
+
+    /// <summary>
+    /// Radial Blurの中心を基準とした画面倍率を設定する。
+    /// </summary>
+    void SetRadialBlurScale(float scale);
+
+    /// <summary>
+    /// Radial Blurの白黒混合率を設定する。
+    /// </summary>
+    void SetRadialBlurGrayscaleAmount(float amount);
 
     /// <summary>
     /// 画面歪みの中心UV座標を設定する

@@ -263,6 +263,16 @@ public:
     uint32_t GetRadialBlurSampleCount() const { return settings_.radialBlurSampleCount; }
 
     /// <summary>
+    /// Radial Blurの中心を基準とした画面倍率を設定する。
+    /// </summary>
+    void SetRadialBlurScale(float scale);
+
+    /// <summary>
+    /// Radial Blurの白黒混合率を設定する。
+    /// </summary>
+    void SetRadialBlurGrayscaleAmount(float amount);
+
+    /// <summary>
     /// 画面歪み用PSOが生成済みか確認する
     /// </summary>
     bool IsDistortionReady() const;
