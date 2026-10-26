@@ -1,38 +1,14 @@
 #include "PlayScene.h"
 #include "ImGuiManager.h"
 #include "../../engine/2d/Sprite.h"
-#include "../../engine/3d/Object3d.h"
 
 #include <algorithm>
 #include <array>
 #include <string>
-#include <vector>
 
 using namespace MyEngine;
 
 namespace {
-constexpr std::array<const char*, 9> kSceneObjectCreateModelNames = {
-    "block/block.obj",
-    "plane/plane.gltf",
-    "bunny/bunny.obj",
-    "teapot/teapot.obj",
-    "fence/fence.obj",
-    "sphere/sphere.gltf",
-    "terrain/terrain.obj",
-    "multiMesh/multiMesh.obj",
-    "multiMaterial/multiMaterial.obj",
-}; // ImGuiから生成できる3Dモデル名
-constexpr std::array<const char*, 9> kSceneObjectCreateModelDisplayNames = {
-    "block.obj",
-    "plane.gltf",
-    "bunny.obj",
-    "teapot.obj",
-    "fence.obj",
-    "sphere.gltf",
-    "terrain.obj",
-    "multiMesh.obj",
-    "multiMaterial.obj",
-}; // ImGuiに表示する3Dモデル名
 constexpr std::array<const char*, 5> kSceneSpriteCreateTextureNames = {
     "uvChecker.png",
     "monsterBall.png",
@@ -121,99 +97,6 @@ void PlayScene::DrawSceneSpriteEditImGui()
         }
     } else {
         ImGui::Text("No sprites.");
-    }
-#endif
-}
-
-/// <summary>
-/// ImGuiでシーン内3Dオブジェクトの生成と削除を行う
-/// </summary>
-void PlayScene::DrawSceneObjectEditImGui()
-{
-#ifdef USE_IMGUI
-    int& selectedCreateModelIndex = objectEditorState_.selectedCreateModelIndex; // このシーンの生成モデル選択
-    int& selectedDeleteObjectIndex = objectEditorState_.selectedDeleteObjectIndex; // このシーンの削除オブジェクト選択
-
-    ImGui::SeparatorText("Create");
-    const char* modelNames[kSceneObjectCreateModelDisplayNames.size()] = {}; // Combo表示用のモデル名一覧
-    for (size_t modelIndex = 0; modelIndex < kSceneObjectCreateModelDisplayNames.size(); ++modelIndex) {
-        modelNames[modelIndex] = kSceneObjectCreateModelDisplayNames[modelIndex];
-    }
-
-    ImGui::Combo(
-        "Model",
-        &selectedCreateModelIndex,
-        modelNames,
-        static_cast<int>(kSceneObjectCreateModelDisplayNames.size()));
-    selectedCreateModelIndex = (std::clamp)(
-        selectedCreateModelIndex,
-        0,
-        static_cast<int>(kSceneObjectCreateModelDisplayNames.size()) - 1);
-    if (ImGui::Button("Create Object")) {
-        const std::string modelFileName = kSceneObjectCreateModelNames[static_cast<size_t>(selectedCreateModelIndex)]; // 生成するモデルファイル名
-        CreateSceneObject(modelFileName);
-        selectedDeleteObjectIndex = static_cast<int>(objects3d_.size()) - 1;
-    }
-
-    ImGui::SeparatorText("Delete");
-    if (!objects3d_.empty()) {
-        const int objectCount = static_cast<int>(objects3d_.size()); // 削除対象として選択できるオブジェクト数
-        selectedDeleteObjectIndex = (std::clamp)(selectedDeleteObjectIndex, 0, objectCount - 1);
-
-        std::string preview = "Object " + std::to_string(selectedDeleteObjectIndex); // Comboの現在表示名
-        Object3d* previewObject = objects3d_[static_cast<size_t>(selectedDeleteObjectIndex)].get(); // 現在選択中のオブジェクト
-        if (previewObject && !previewObject->GetDebugName().empty()) {
-            preview += " : " + GetDisplayFileName(previewObject->GetDebugName());
-        }
-
-        if (ImGui::BeginCombo("Delete Target", preview.c_str())) {
-            for (int objectIndex = 0; objectIndex < objectCount; ++objectIndex) {
-                Object3d* object = objects3d_[static_cast<size_t>(objectIndex)].get(); // 表示名を作る対象のオブジェクト
-                std::string label = "Object " + std::to_string(objectIndex); // Comboに表示するオブジェクト名
-                if (object && !object->GetDebugName().empty()) {
-                    label += " : " + GetDisplayFileName(object->GetDebugName());
-                }
-
-                const bool isSelected = selectedDeleteObjectIndex == objectIndex; // 現在選択中かどうか
-                if (ImGui::Selectable(label.c_str(), isSelected)) {
-                    selectedDeleteObjectIndex = objectIndex;
-                }
-                if (isSelected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-
-        if (ImGui::Button("Delete Object")) {
-            DeleteSceneObject(static_cast<size_t>(selectedDeleteObjectIndex));
-            selectedDeleteObjectIndex = (std::min)(selectedDeleteObjectIndex, static_cast<int>(objects3d_.size()) - 1);
-        }
-    } else {
-        ImGui::Text("No objects.");
-    }
-
-    DrawCollisionDebugImGui();
-#endif
-}
-
-/// <summary>
-/// ImGuiで衝突判定の状態を表示する。
-/// </summary>
-void PlayScene::DrawCollisionDebugImGui()
-{
-#ifdef USE_IMGUI
-    ImGui::SeparatorText("Collision");
-    ImGui::Text("Collider Count: %zu", collisionSystem_.GetColliderCount());
-    ImGui::Text("Broad Phase: %s", collisionSystem_.GetSpatialHashEnabled() ? "Spatial Hash" : "Brute Force");
-    ImGui::Text("Cell Size: %.2f", collisionSystem_.GetSpatialHashCellSize());
-    ImGui::Text("Candidate Pair Count: %zu", collisionSystem_.GetLastCandidatePairCount());
-    ImGui::Text("Hit Pair Count: %zu", lastCollisionPairCount_);
-
-    const std::vector<CollisionSystem::CollisionPair>& collisionPairs = collisionSystem_.GetCollisionPairs(); // 表示対象の衝突ペア一覧
-    for (size_t pairIndex = 0; pairIndex < collisionPairs.size(); ++pairIndex) {
-        const CollisionSystem::CollisionPair& pair = collisionPairs[pairIndex]; // 表示中の衝突ペア
-        ImGui::Text("Pair %zu: Object %u <-> Object %u", pairIndex, pair.objectIdA, pair.objectIdB);
     }
 #endif
 }

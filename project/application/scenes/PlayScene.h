@@ -342,19 +342,9 @@ private:
     void DrawEffectControllerImGui();
 
     /// <summary>
-    /// ImGuiでシーン内3Dオブジェクトの生成と削除を行う
-    /// </summary>
-    void DrawSceneObjectEditImGui();
-
-    /// <summary>
     /// 実ステージで使用中のオブジェクト編集ImGuiを描画する。
     /// </summary>
     void DrawPastSelfTutorialStageEditorImGui();
-
-    /// <summary>
-    /// ImGuiでレベルJSONの読み込み状態を表示する。
-    /// </summary>
-    void DrawLevelDataImGui();
 
     /// <summary>
     /// LevelData編集ImGuiの一時状態を保持する。
@@ -415,11 +405,6 @@ private:
     /// LevelData編集ImGuiの遅延履歴と自動保存を処理する。
     /// </summary>
     void FlushLevelEditorDeferredActions(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// ImGuiで衝突判定の状態を表示する。
-    /// </summary>
-    void DrawCollisionDebugImGui();
 
     /// <summary>
     /// ImGuiでシーン内スプライトの生成と削除を行う。

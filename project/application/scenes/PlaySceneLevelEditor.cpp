@@ -1292,28 +1292,6 @@ void PlayScene::FlushLevelEditorDeferredActions(LevelEditorImGuiState& state)
 #endif
 
 /// <summary>
-/// ImGuiでレベルJSONの読み込み状態を表示する。
-/// </summary>
-void PlayScene::DrawLevelDataImGui()
-{
-#ifdef USE_IMGUI
-    LevelEditorImGuiState& levelEditorImGuiState = levelEditorImGuiState_; // このシーンが所有する編集状態
-    SyncTextBuffer(levelDataFileName_, levelEditorImGuiState.levelPathBuffer, levelEditorImGuiState.bufferedLevelPath);
-    levelSaveFileName_ = levelDataFileName_;
-    SyncTextBuffer(levelEditorImGuiState.levelPrefabFileName, levelEditorImGuiState.levelPrefabPathBuffer, levelEditorImGuiState.bufferedLevelPrefabPath);
-
-    DrawLevelLoadSectionImGui(levelEditorImGuiState);
-    DrawLevelSaveSectionImGui(levelEditorImGuiState);
-    DrawLevelPrefabSectionImGui(levelEditorImGuiState);
-    DrawLevelSceneApplySectionImGui(levelEditorImGuiState);
-    DrawLevelStatusSectionImGui();
-    DrawLevelConfirmPopupsImGui(levelEditorImGuiState);
-    DrawLevelObjectsSectionImGui(levelEditorImGuiState);
-    FlushLevelEditorDeferredActions(levelEditorImGuiState);
-#endif
-}
-
-/// <summary>
 /// 選択中エフェクトの詳細ImGuiを描画する。
 /// </summary>
 void PlayScene::DrawSelectedEffectImGui()
