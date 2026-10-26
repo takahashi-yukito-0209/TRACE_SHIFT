@@ -144,7 +144,7 @@ void PlayScene::InitializeParticleManager()
     }
 
     particleManager->ClearSceneParticles();
-    if (kUsePostEffectPreviewScene) {
+    if (!kEnableLegacyPreview) {
         // 確認用GPU粒子は発生させず、エフェクト起動時のプリセット読み込みを待つ。
         if (PM_GpuEmitterSphere* emitterState = particleManager->GetMutableGpuEmitterState()) { // 発生数を初期化するGPU設定
             emitterState->count = 0;
@@ -254,7 +254,7 @@ void PlayScene::UpdateParticleSystems(float deltaTime)
 {
     const bool hasActiveHitStop = HasActiveHitStop(temporalRiftEffect_.GetHitStopRemainingTime()); // ヒットストップ中か
     const float particleDeltaTime = (hasActiveHitStop || IsTimeStopped()) ? kStoppedDeltaTime : deltaTime; // ヒットストップと時間停止を反映したパーティクル時間
-    if (!kUsePostEffectPreviewScene) {
+    if (kEnableLegacyPreview) {
         pmEmitter_.Update(particleDeltaTime);
         ringEmitter_.Update(particleDeltaTime);
         cylinderEmitter_.Update(particleDeltaTime);

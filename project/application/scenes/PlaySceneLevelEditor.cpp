@@ -35,7 +35,6 @@ constexpr std::array<const char*, 3> kModelFileExtensions = { ".obj", ".gltf", "
 constexpr const char* kSceneEditorWindowName = "Scene Editor"; // シーン編集用ImGuiウィンドウ名
 constexpr bool kShowSceneJsonLevelEditorOverlay = false; // SceneJSON非表示中にLevel EditorのScene View重ね描きを行うか
 constexpr const char* kEffectTypeComboLabel = "Effect Type"; // エフェクト種別選択のImGuiラベル
-constexpr const char* kEffectTriggerKeyText = "Trigger Key: R"; // エフェクト開始キーの表示文
 constexpr const char* kPlayEffectButtonLabel = "Play Effect"; // エフェクト再生ボタンの表示文
 constexpr size_t kMaxLevelUndoHistory = 32; // Level EditorのUndo履歴最大数
 constexpr std::array<const char*, 3> kEffectNames = {
@@ -853,9 +852,6 @@ void PlayScene::DrawEffectControllerImGui()
         StartSelectedEffect();
     }
     ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("%s", kEffectTriggerKeyText);
-    }
 #endif
 }
 

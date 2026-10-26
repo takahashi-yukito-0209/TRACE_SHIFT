@@ -54,7 +54,7 @@ constexpr std::array<PostProcessShortcutDesc, 11> kPostProcessShortcutDescs = {
     PostProcessShortcutDesc { DIK_8, PostEffectType::Dissolve },
     PostProcessShortcutDesc { DIK_9, PostEffectType::Random },
     PostProcessShortcutDesc { DIK_Q, PostEffectType::Distortion },
-}; // Releaseでも使えるポストエフェクト切り替えキー
+}; // 開発ビルドだけで使うポストエフェクトの検証用切り替えキー
 
 /// <summary>
 /// レベルJSONの読み書きに使う実ファイルパスを取得する。
@@ -952,10 +952,10 @@ void PlayScene::Initialize(const SceneContext& ctx)
         SelectPastSelfTutorialRoute(routes[stageSelection_->selectedStageIndex]);
     }
     InitializeParticleObjects();
-    if (kUsePostEffectPreviewScene) {
-        InitializeParticleManager();
-    } else {
+    if (kEnableLegacyPreview) {
         InitializeParticleEffects();
+    } else {
+        InitializeParticleManager();
     }
     InitializeTemporalEffectSprites();
     InitializePostProcessTargets();
@@ -1066,27 +1066,11 @@ void PlayScene::Finalize()
 }
 
 /// <summary>
-/// エフェクト開始入力を処理する。
-/// </summary>
-void PlayScene::HandleEffectStartInput()
-{
-    if (ShouldBlockGameShortcutInput()) {
-        return;
-    }
-
-    InputManager* inputManager = InputManager::GetInstance(); // エフェクト開始入力を取得する入力管理
-    if (inputManager
-        && inputManager->IsKeyJustPressed(DIK_R)
-        && !IsAnyEffectPlaying()) {
-        StartSelectedEffect();
-    }
-}
-
-/// <summary>
-/// ポストエフェクト切り替え入力を処理する。
+/// 開発ビルドでポストエフェクトの検証用切り替え入力を処理する。
 /// </summary>
 void PlayScene::HandlePostProcessShortcutInput()
 {
+#ifdef USE_IMGUI
     if (ShouldBlockGameShortcutInput()) {
         return;
     }
@@ -1104,6 +1088,7 @@ void PlayScene::HandlePostProcessShortcutInput()
         ApplyPostProcessShortcut(shortcutDesc.effectType);
         return;
     }
+#endif
 }
 
 /// <summary>
@@ -1202,9 +1187,6 @@ void PlayScene::Update(float dt)
         UpdatePastSelfTutorialVisuals();
         UpdateSceneObjects(0.0f);
         return;
-    }
-    if (!kUsePostEffectPreviewScene) {
-        HandleEffectStartInput();
     }
     HandlePostProcessShortcutInput();
     UpdateTemporalEffects(dt);

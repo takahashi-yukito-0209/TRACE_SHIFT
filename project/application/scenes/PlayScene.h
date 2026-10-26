@@ -427,12 +427,7 @@ private:
     bool IsAnyEffectPlaying() const;
 
     /// <summary>
-    /// エフェクト開始入力を処理する。
-    /// </summary>
-    void HandleEffectStartInput();
-
-    /// <summary>
-    /// ポストエフェクト切り替え入力を処理する。
+    /// 開発ビルドでポストエフェクトの検証用切り替え入力を処理する。
     /// </summary>
     void HandlePostProcessShortcutInput();
 
@@ -1111,7 +1106,7 @@ private:
     void DrawDebugLines2D();
 
 private: // メンバー変数
-    static constexpr bool kUsePostEffectPreviewScene = true; // 確認用の常時発生粒子・通常スプライト・エフェクト開始キーを止める
+    static constexpr bool kEnableLegacyPreview = false; // 旧検証用の常時発生粒子・通常スプライト・補助描画を有効にするか
 
     MyEngine::SceneContext ctx_;
     MyEngine::LevelData levelData_; // Blenderから読み込んだレベルデータ

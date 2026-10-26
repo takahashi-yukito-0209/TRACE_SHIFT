@@ -561,7 +561,7 @@ void PlayScene::DrawWorldAndParticles()
     }
 
     if (ctx_.debugRenderer) {
-        if (!kUsePostEffectPreviewScene) {
+        if (kEnableLegacyPreview) {
             ctx_.debugRenderer->DrawGrid(kDebugGridCenter, kDebugGridHalfLineCount, kDebugGridSpacing, kDebugGridColor);
         }
         if (kShowSceneJsonObjects && !levelData_.objects.empty()) {
@@ -574,7 +574,7 @@ void PlayScene::DrawWorldAndParticles()
                 }
             }
         }
-        if (!kUsePostEffectPreviewScene) {
+        if (kEnableLegacyPreview) {
             DrawEmitterDebugGrid(*ctx_.debugRenderer, pmEmitter_, kHitEmitterDebugRangeColor, kHitEmitterDebugGridColor);
             DrawEmitterDebugGrid(*ctx_.debugRenderer, ringEmitter_, kRingEmitterDebugRangeColor, kRingEmitterDebugGridColor);
             DrawEmitterDebugGrid(*ctx_.debugRenderer, cylinderEmitter_, kCylinderEmitterDebugRangeColor, kCylinderEmitterDebugGridColor);
@@ -595,7 +595,7 @@ void PlayScene::DrawSprites()
     }
 
     ctx_.spriteCommon->SetCommonDrawSetting();
-    if (!kUsePostEffectPreviewScene) {
+    if (kEnableLegacyPreview) {
         for (auto& sprite : sprites_) {
             if (sprite) {
                 sprite->Draw();
