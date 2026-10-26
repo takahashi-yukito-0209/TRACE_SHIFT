@@ -1011,6 +1011,9 @@ void PlayScene::ReleaseSceneObjects()
     stageStartDim_.reset();
     stageStartSound_.reset();
     stageStartSequence_ = {};
+    stageFailureSequence_ = {};
+    stageFailureDim_.reset();
+    stageFailureSound_.reset();
     sprites_.clear();
     spritePointerView_.clear();
     nextSpriteId_ = 1;
@@ -1210,6 +1213,10 @@ void PlayScene::Update(float dt)
         UpdateSceneObjects(0.0f);
         return;
     }
+    if (stageFailureSequence_.IsActive()) {
+        UpdateStageFailurePresentation(dt);
+        return;
+    }
     if (HandleStageCompletion()) {
         return;
     }
@@ -1236,6 +1243,12 @@ void PlayScene::Update(float dt)
         ctx_.camera->Update();
     }
     UpdatePastSelfTutorial(dt);
+    if (stageFailureSequence_.IsActive()) {
+        if (auto* particleManager = ParticleManager::GetInstance()) { // 失敗が始まったフレームからGPUの時間も止める管理クラス
+            particleManager->Update(0.0f);
+        }
+        return;
+    }
     if (HandleStageCompletion()) {
         return;
     }

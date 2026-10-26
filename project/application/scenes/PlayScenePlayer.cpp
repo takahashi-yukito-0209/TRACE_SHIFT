@@ -1292,7 +1292,9 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
             RegisterPastSelfTutorialCheckCompleted("Player used a clone as a platform");
         }
         if (player_.GetState().transform.translate.y < kPastSelfTutorialFallResetY) {
-            ResetPastSelfTutorialState();
+            BeginStageFailurePresentation();
+            UpdatePastSelfTutorialVisuals();
+            return;
         }
         const bool wasRecording = pastSelfRecorder_.IsRecording(); // 記録更新前に記録中だったか
         pastSelfRecorder_.Update(deltaTime, player_.GetState());
@@ -1747,7 +1749,7 @@ void PlayScene::DrawPastSelfTutorial()
     DrawPastSelfTutorialMechanics();
     DrawPastSelfTutorialCloneRecordMarkers();
     pastSelfCloneManager_.Draw();
-    if (stageStartSequence_.IsArrivalVisible() && stageStartBody_ && ctx_.object3dCommon) {
+    if ((stageStartSequence_.IsArrivalVisible() || stageFailureSequence_.IsActive()) && stageStartBody_ && ctx_.object3dCommon) {
         const BlendMode previousBlend = ctx_.object3dCommon->GetBlendMode(); // 出現表示の前の合成設定
         ctx_.object3dCommon->SetBlendMode(BlendMode::Alpha);
         ctx_.object3dCommon->SetCommonDrawSetting();

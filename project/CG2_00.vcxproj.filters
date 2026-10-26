@@ -659,6 +659,9 @@
     <ClInclude Include="application\scenes\StageStartSequenceState.h">
       <Filter>ヘッダー ファイル\application\scenes</Filter>
     </ClInclude>
+    <ClInclude Include="application\scenes\StageFailureSequenceState.h">
+      <Filter>ヘッダー ファイル\application\scenes</Filter>
+    </ClInclude>
     <ClInclude Include="application\scenes\PauseMenuState.h">
       <Filter>ヘッダー ファイル\application\scenes</Filter>
     </ClInclude>

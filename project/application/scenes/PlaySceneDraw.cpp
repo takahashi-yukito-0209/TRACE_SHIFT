@@ -612,6 +612,16 @@ void PlayScene::DrawSprites()
         stageStartDim_->Draw();
     }
     DrawStageSelectionOverlay();
+    if (stageFailureSequence_.IsActive() && stageFailureDim_ && ctx_.directXCommon) {
+        stageFailureDim_->SetPosition({ 0.0f, 0.0f });
+        stageFailureDim_->SetSize({ ctx_.directXCommon->GetRenderWidth(), ctx_.directXCommon->GetRenderHeight() });
+        stageFailureDim_->SetColor({ 0.0f, 0.0f, 0.0f, stageFailureSequence_.GetDimAlpha() });
+        stageFailureDim_->Update();
+        stageFailureDim_->Draw();
+    }
+    if (stageFailureSequence_.IsActive()) {
+        return;
+    }
     DrawPauseMenu();
 }
 
@@ -637,6 +647,8 @@ void PlayScene::InitializeStageSelectionOverlay()
     stageOverlayBackground_->InitializeSolidColor(ctx_.spriteCommon, ctx_.srvManager);
     stageStartDim_ = std::make_unique<Sprite>();
     stageStartDim_->InitializeSolidColor(ctx_.spriteCommon, ctx_.srvManager);
+    stageFailureDim_ = std::make_unique<Sprite>();
+    stageFailureDim_->InitializeSolidColor(ctx_.spriteCommon, ctx_.srvManager);
     if (!stageStartRing_ && ctx_.object3dCommon) {
         stageStartRing_ = std::make_unique<Object3d>();
         stageStartRing_->Initialize(ctx_.object3dCommon, ctx_.imguiManager);
@@ -648,6 +660,9 @@ void PlayScene::InitializeStageSelectionOverlay()
     }
     if (!stageStartSound_ && ctx_.soundSystem && ctx_.soundSystem->IsReady()) {
         stageStartSound_ = ctx_.soundSystem->LoadFromFile("sounds/se/stage_start.wav");
+    }
+    if (!stageFailureSound_ && ctx_.soundSystem && ctx_.soundSystem->IsReady()) {
+        stageFailureSound_ = ctx_.soundSystem->LoadFromFile("sounds/se/stage_failure.wav");
     }
     BeginStageStartPresentation(false);
 }
@@ -693,7 +708,7 @@ void PlayScene::UpdateStageStartPresentationVisuals()
     stageStartRing_->SetScale({ scale, scale, scale });
     stageStartRing_->SetMaterialColor({ 0.35f, 0.9f, 1.0f, alpha });
     stageStartRing_->Update(ctx_.camera->GetViewMatrix(), ctx_.camera->GetProjectionMatrix());
-    if (!stageStartSequence_.IsArrivalVisible() || !stageStartBody_) {
+    if ((!stageStartSequence_.IsArrivalVisible() && !stageFailureSequence_.IsActive()) || !stageStartBody_) {
         return;
     }
     const PlayerState& state = player_.GetState(); // ゲーム状態を変えず表示だけに使う本体姿勢
@@ -702,9 +717,42 @@ void PlayScene::UpdateStageStartPresentationVisuals()
     stageStartBody_->SetTranslate(state.transform.translate);
     stageStartBody_->SetRotate(state.transform.rotate);
     stageStartBody_->SetScale(state.transform.scale);
-    const float bodyAlpha = 0.12f + 0.88f * eased; // 開始の実体化に使う透明度
+    const float bodyAlpha = stageFailureSequence_.IsActive() ? stageFailureSequence_.GetBodyAlpha() : 0.12f + 0.88f * eased; // 開始の実体化または失敗の消失・復帰に使う透明度
     stageStartBody_->SetMaterialColor({ 0.0f, 0.86f, 1.0f, bodyAlpha });
     stageStartBody_->Update(ctx_.camera->GetViewMatrix(), ctx_.camera->GetProjectionMatrix());
+}
+
+/// <summary>
+/// 落下地点で進行を止め、失敗音と消失演出を開始する。
+/// </summary>
+void PlayScene::BeginStageFailurePresentation()
+{
+    if (stageFailureSequence_.IsActive()) {
+        return;
+    }
+    stageFailureSequence_.Begin();
+    stageStartSequence_ = {};
+    if (ctx_.soundSystem && stageFailureSound_) {
+        ctx_.soundSystem->Play(stageFailureSound_);
+    }
+}
+
+/// <summary>
+/// 暗転中に現在区間へ復帰し、短い開始演出と明転を進める。
+/// </summary>
+void PlayScene::UpdateStageFailurePresentation(float deltaTime)
+{
+    const bool wasRespawned = stageFailureSequence_.HasRespawned(); // 今回の更新前に開始地点へ復帰済みだったか
+    if (stageFailureSequence_.Update(deltaTime)) {
+        ResetPastSelfTutorialState();
+    } else if (wasRespawned) {
+        UpdateStageStartPresentation(deltaTime);
+    }
+    UpdatePastSelfTutorialVisuals();
+    UpdateSceneObjects(0.0f);
+    if (auto* particleManager = ParticleManager::GetInstance()) { // 失敗演出中の描画に停止時間を渡す管理クラス
+        particleManager->Update(0.0f);
+    }
 }
 
 /// <summary>

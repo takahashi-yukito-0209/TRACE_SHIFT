@@ -14,6 +14,7 @@
 #include "StageRuleSettings.h"
 #include "ClonePlatformCourseState.h"
 #include "StageStartSequenceState.h"
+#include "StageFailureSequenceState.h"
 #include "PauseMenuState.h"
 #include "TraceShiftStageJson.h"
 #include "PlaySceneEditorState.h"
@@ -169,6 +170,9 @@ private:
     std::unique_ptr<MyEngine::Sprite> stageIntroSprite_; // ステージ開始時に短く表示する番号とテーマ
     std::unique_ptr<MyEngine::Sprite> stageOverlayBackground_; // 開始文字の背景となる上部の帯
     StageStartSequenceState stageStartSequence_; // 表示・音・光・操作解禁で共有する演出時間
+    StageFailureSequenceState stageFailureSequence_; // 落下の消失・暗転・復帰の演出時間
+    std::unique_ptr<MyEngine::Sprite> stageFailureDim_; // 画面外の落下でも失敗を伝える暗幕
+    std::shared_ptr<MyEngine::SoundClip> stageFailureSound_; // 開始音と同じ系統の短い下降音
     std::unique_ptr<MyEngine::Object3d> stageStartRing_; // 操作解禁時に足元へ広がる表示専用リング
     std::unique_ptr<MyEngine::Object3d> stageStartBody_; // 出現中だけ本体に代えて表示する実体化用モデル
     std::unique_ptr<MyEngine::Sprite> stageStartDim_; // 出現開始から通常の明るさへ戻す画面の薄暗幕
@@ -194,6 +198,16 @@ private:
     /// 実体化する本体と開始リングの描画状態を更新する。
     /// </summary>
     void UpdateStageStartPresentationVisuals();
+
+    /// <summary>
+    /// 落下地点で進行を止め、失敗音と消失演出を開始する。
+    /// </summary>
+    void BeginStageFailurePresentation();
+
+    /// <summary>
+    /// 暗転中に現在区間へ復帰し、短い開始演出と明転を進める。
+    /// </summary>
+    void UpdateStageFailurePresentation(float deltaTime);
 
     /// <summary>
     /// 提出用の到達判定を検出し、クリア履歴を記録せずタイトルへ戻す。
@@ -436,6 +450,7 @@ private:
     /// ポストエフェクト切り替え入力を処理する。
     /// </summary>
     void HandlePostProcessShortcutInput();
+
 
     /// <summary>
     /// 分身チュートリアル用オブジェクトを初期化する。
@@ -985,6 +1000,7 @@ private:
     /// LevelDataの選択コライダーを対応するObject3dへ反映する。
     /// </summary>
     void ApplyLevelColliderEditToSceneObject(size_t objectIndex, const MyEngine::LevelObjectData& objectData);
+
 
     /// <summary>
     /// ポストプロセス描画が利用できるか判定する
