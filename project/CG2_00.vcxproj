@@ -252,6 +252,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="application\player\PastSelfCloneManager.cpp" />
     <ClCompile Include="application\gimmicks\StageGimmicks.cpp" />
     <ClCompile Include="application\scenes\PlaySceneDraw.cpp" />
+    <ClCompile Include="application\scenes\PlayScenePause.cpp" />
     <ClCompile Include="application\scenes\PlaySceneEditorImGui.cpp" />
     <ClCompile Include="application\scenes\PlayScenePostProcess.cpp" />
     <ClCompile Include="application\scenes\PlaySceneParticle.cpp" />
@@ -467,6 +468,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="application\scenes\StageRuleSettings.h" />
     <ClInclude Include="application\scenes\ClonePlatformCourseState.h" />
     <ClInclude Include="application\scenes\StageStartSequenceState.h" />
+    <ClInclude Include="application\scenes\PauseMenuState.h" />
     <ClInclude Include="application\player\Player.h" />
     <ClInclude Include="application\player\PlayerState.h" />
     <ClInclude Include="application\player\PastSelfRecorder.h" />

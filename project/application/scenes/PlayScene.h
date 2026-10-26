@@ -14,6 +14,7 @@
 #include "StageRuleSettings.h"
 #include "ClonePlatformCourseState.h"
 #include "StageStartSequenceState.h"
+#include "PauseMenuState.h"
 #include "TraceShiftStageJson.h"
 #include "PlaySceneEditorState.h"
 #include "PastSelfTutorialState.h"
@@ -142,6 +143,28 @@ public: // メンバ関数
     void FillParticleEmitterPointers(std::vector<::ParticleEmitter*>* out) override;
 
 private:
+    PauseMenuState pauseMenu_; // ポーズ・操作説明・確認画面の選択状態
+    std::unique_ptr<MyEngine::Sprite> pauseDimmer_; // ポーズ中にゲーム画面を暗くする背景
+    std::unique_ptr<MyEngine::Sprite> pausePanel_; // 文字を読みやすくするメニューの背景
+    std::unique_ptr<MyEngine::Sprite> pauseCursor_; // 選択中の項目を示すライン
+    std::vector<std::unique_ptr<MyEngine::Sprite>> pauseTexts_; // 見出し・項目・補足を独立した描画定数で表示する文字
+    std::unique_ptr<MyEngine::Sprite> pauseControls_; // タイトルと共通の操作説明画像
+
+    /// <summary>
+    /// ポーズと操作説明に使う表示部品を初期化する。
+    /// </summary>
+    void InitializePauseMenu();
+
+    /// <summary>
+    /// ポーズの入力と確認済み操作を処理し、そのフレームをゲームへ渡さないか返す。
+    /// </summary>
+    bool HandlePauseMenuInput();
+
+    /// <summary>
+    /// ポーズの背景・項目・操作説明をゲーム画面へ重ねる。
+    /// </summary>
+    void DrawPauseMenu();
+
     std::shared_ptr<GameApp::StageSelectionState> stageSelection_; // 選択画面と共有する起動中の攻略履歴
     std::unique_ptr<MyEngine::Sprite> stageIntroSprite_; // ステージ開始時に短く表示する番号とテーマ
     std::unique_ptr<MyEngine::Sprite> stageOverlayBackground_; // 開始文字の背景となる上部の帯

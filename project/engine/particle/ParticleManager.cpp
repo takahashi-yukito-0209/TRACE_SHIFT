@@ -577,6 +577,11 @@ void ParticleManager::UpdateGpuEmitter(float dt)
     gpuPerFrameState_.colorOverLife = gpuEmitterState_.colorOverLife;
     gpuEmitterState_.emit = 0;
 
+    // 時間停止中は新規発生を行わず、保留中の手動発生要求も再開まで保持する。
+    if (dt <= 0.0f) {
+        return;
+    }
+
     if (gpuEmitterState_.count == 0) {
         gpuEmitterManualEmitRequested_ = false;
         ClearGpuEmitterRuntimeParticleState();

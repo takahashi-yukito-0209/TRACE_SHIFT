@@ -327,6 +327,9 @@
     <ClCompile Include="application\scenes\PlaySceneDraw.cpp">
       <Filter>ソース ファイル\application\scenes</Filter>
     </ClCompile>
+    <ClCompile Include="application\scenes\PlayScenePause.cpp">
+      <Filter>ソース ファイル\application\scenes</Filter>
+    </ClCompile>
     <ClCompile Include="application\scenes\PlaySceneEditorImGui.cpp">
       <Filter>ソース ファイル\application\scenes</Filter>
     </ClCompile>
@@ -654,6 +657,9 @@
       <Filter>ヘッダー ファイル\application\scenes</Filter>
     </ClInclude>
     <ClInclude Include="application\scenes\StageStartSequenceState.h">
+      <Filter>ヘッダー ファイル\application\scenes</Filter>
+    </ClInclude>
+    <ClInclude Include="application\scenes\PauseMenuState.h">
       <Filter>ヘッダー ファイル\application\scenes</Filter>
     </ClInclude>
     <ClInclude Include="application\player\Player.h">

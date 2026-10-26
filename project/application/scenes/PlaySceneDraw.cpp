@@ -612,6 +612,7 @@ void PlayScene::DrawSprites()
         stageStartDim_->Draw();
     }
     DrawStageSelectionOverlay();
+    DrawPauseMenu();
 }
 
 /// <summary>

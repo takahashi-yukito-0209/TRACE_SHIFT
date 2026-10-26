@@ -1,4 +1,5 @@
 #include "PlayScene.h"
+#include "../../engine/particle/ParticleManager.h"
 #include "ImGuiManager.h"
 #include "../../engine/2d/Sprite.h"
 #include "../../engine/2d/SpriteCommon.h"
@@ -989,6 +990,7 @@ void PlayScene::Initialize(const SceneContext& ctx)
     InitializeTemporalEffectSprites();
     InitializePostProcessTargets();
     InitializeStageSelectionOverlay();
+    InitializePauseMenu();
 }
 
 /// <summary>
@@ -996,6 +998,12 @@ void PlayScene::Initialize(const SceneContext& ctx)
 /// </summary>
 void PlayScene::ReleaseSceneObjects()
 {
+    pauseMenu_.Close();
+    pauseDimmer_.reset();
+    pausePanel_.reset();
+    pauseCursor_.reset();
+    pauseControls_.reset();
+    pauseTexts_.clear();
     stageIntroSprite_.reset();
     stageOverlayBackground_.reset();
     stageStartRing_.reset();
@@ -1203,6 +1211,13 @@ void PlayScene::Update(float dt)
         return;
     }
     if (HandleStageCompletion()) {
+        return;
+    }
+    if (HandlePauseMenuInput()) {
+        // GPU描画側にも停止した時間を渡し、直前フレームの時間で進むことを防ぐ。
+        if (auto* particleManager = ParticleManager::GetInstance()) { // 停止中の描画時間を同期する管理クラス
+            particleManager->Update(0.0f);
+        }
         return;
     }
     UpdateStageStartPresentation(dt);
