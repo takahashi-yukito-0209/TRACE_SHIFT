@@ -658,11 +658,6 @@ private:
     void SelectPastSelfTutorialRoute(PastSelfTutorialRoute route);
 
     /// <summary>
-    /// クリア済みのルートから次のチュートリアルルートへ進む。
-    /// </summary>
-    void AdvancePastSelfTutorialRoute();
-
-    /// <summary>
     /// 現在選択中のチュートリアルルート名を取得する。
     /// </summary>
     const char* GetPastSelfTutorialRouteLabel() const;

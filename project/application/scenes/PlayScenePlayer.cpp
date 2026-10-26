@@ -1770,8 +1770,6 @@ void PlayScene::DrawPastSelfTutorialImGui()
     const size_t storedCloneCount = pastSelfCloneManager_.GetCloneCount(); // 現在保存している分身数
     const bool cloneSlotsFull = storedCloneCount >= pastSelfTutorialStageRules_.maxStoredClones; // 保存枠が上限へ到達したか
     const bool selectedRouteComplete = IsPastSelfTutorialSelectedRouteComplete(); // 選択中ルートがクリア済みか
-    const bool allRoutesComplete = pastSelfTutorialState_.history.oneCloneRouteCleared && pastSelfTutorialState_.history.twoCloneRouteCleared &&
-        pastSelfTutorialState_.history.finalChallengeCleared; // 3つのチュートリアルルートをすべてクリア済みか
     ImGui::Text("Move: A/D or Left Stick X");
     ImGui::Text("Jump: Space or GamePad A");
     ImGui::TextWrapped("C: Record next + replay stored  V: Replay stored only  B: Stop clones");
@@ -1873,21 +1871,6 @@ void PlayScene::DrawPastSelfTutorialImGui()
     if (ImGui::Button("Reset Puzzle")) {
         ResetPastSelfTutorialState();
     }
-    if (selectedRouteComplete) {
-        ImGui::Separator();
-        if (ImGui::Button("Retry Route")) {
-            ResetPastSelfTutorialState();
-        }
-        if (pastSelfTutorialRoute_ != PastSelfTutorialRoute::FinalChallenge) {
-            ImGui::SameLine();
-            if (ImGui::Button("Next Route")) {
-                AdvancePastSelfTutorialRoute();
-            }
-        }
-        if (allRoutesComplete) {
-            ImGui::TextColored(ImVec4(0.15f, 1.0f, 0.45f, 1.0f), "All Routes Complete");
-        }
-    }
     if (ImGui::CollapsingHeader("Clone Identities", ImGuiTreeNodeFlags_DefaultOpen)) {
         pastSelfCloneManager_.DrawIdentityLegendImGui();
     }
@@ -1968,27 +1951,6 @@ bool PlayScene::HandleStageCompletion()
     }
     ctx_.requestSceneChange("Title");
     return true;
-}
-
-/// <summary>
-/// クリア済みのルートから次のチュートリアルルートへ進む。
-/// </summary>
-void PlayScene::AdvancePastSelfTutorialRoute()
-{
-    if (!IsPastSelfTutorialSelectedRouteComplete()) {
-        return;
-    }
-
-    switch (pastSelfTutorialRoute_) {
-    case PastSelfTutorialRoute::OneCloneBasics:
-        SelectPastSelfTutorialRoute(PastSelfTutorialRoute::TwoCloneCooperation);
-        break;
-    case PastSelfTutorialRoute::TwoCloneCooperation:
-        SelectPastSelfTutorialRoute(PastSelfTutorialRoute::FinalChallenge);
-        break;
-    case PastSelfTutorialRoute::FinalChallenge:
-        break;
-    }
 }
 
 /// <summary>

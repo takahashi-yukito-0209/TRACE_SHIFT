@@ -367,13 +367,12 @@ int main()
 
         PlaySceneObjectEditorState first; // 最初のシーンの編集選択
         PlaySceneObjectEditorState second; // 別シーンの編集選択
-        first = { 4, 3, 2, 1 };
+        first = { 4, 3 };
         Check(second.selectedCreateTextureIndex == 0 && second.selectedDeleteSpriteIndex == 0
-            && second.selectedCreateModelIndex == 0 && second.selectedDeleteObjectIndex == 0,
+            && first.selectedCreateTextureIndex == 4 && first.selectedDeleteSpriteIndex == 3,
             "Object editor selection leaked between scenes");
         first = {};
-        Check(first.selectedCreateTextureIndex == 0 && first.selectedDeleteSpriteIndex == 0
-            && first.selectedCreateModelIndex == 0 && first.selectedDeleteObjectIndex == 0,
+        Check(first.selectedCreateTextureIndex == 0 && first.selectedDeleteSpriteIndex == 0,
             "Object editor selection reset failed");
         std::cout << "Tutorial state tests passed: 256 puzzle resets, 2048 replay resets, 135168 HUD summaries\n";
         return 0;
