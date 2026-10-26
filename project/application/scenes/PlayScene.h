@@ -2,8 +2,6 @@
 #include "../../engine/base/IScene.h"
 #include "../../engine/base/PostProcess.h"
 #include "../../engine/base/RenderTarget.h"
-#include "../../engine/level/LevelData.h"
-#include "../../engine/utility/CollisionSystem.h"
 #include "../effects/TemporalRiftEffect.h"
 #include "../effects/TimeReversalEffect.h"
 #include "../effects/TimeStopEffect.h"
@@ -118,11 +116,6 @@ public: // メンバ関数
     /// Scene ViewのGizmoで3DオブジェクトのTransformが編集されたときに呼び出す。
     /// </summary>
     void NotifyObjectTransformEdited(size_t objectIndex) override;
-
-    /// <summary>
-    /// Scene View画像上へLevel Editor用の編集表示を重ねて描画する。
-    /// </summary>
-    void DrawSceneViewOverlay(const Math::Matrix4x4& viewProjectionMatrix, float imageMinX, float imageMinY, float imageWidth, float imageHeight) override;
 
     /// <summary>
     /// Level EditorとGizmoで共有する選択中3Dオブジェクト番号を取得する。
@@ -347,66 +340,6 @@ private:
     void DrawPastSelfTutorialStageEditorImGui();
 
     /// <summary>
-    /// LevelData編集ImGuiの一時状態を保持する。
-    /// </summary>
-    using LevelEditorImGuiState = PlaySceneLevelEditorState;
-
-    /// <summary>
-    /// LevelData編集ImGuiからレベル再読み込みを実行する。
-    /// </summary>
-    bool ExecuteLevelEditorReload(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiからレベル保存を実行する。
-    /// </summary>
-    void ExecuteLevelEditorSave();
-
-    /// <summary>
-    /// LevelData編集ImGuiから保存後再読み込みを実行する。
-    /// </summary>
-    void ExecuteLevelEditorSaveAndReload(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの読み込み操作を描画する。
-    /// </summary>
-    void DrawLevelLoadSectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの保存操作を描画する。
-    /// </summary>
-    void DrawLevelSaveSectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiのPrefab操作を描画する。
-    /// </summary>
-    void DrawLevelPrefabSectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiのシーン反映操作を描画する。
-    /// </summary>
-    void DrawLevelSceneApplySectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの状態表示を描画する。
-    /// </summary>
-    void DrawLevelStatusSectionImGui();
-
-    /// <summary>
-    /// LevelData編集ImGuiの確認ポップアップを描画する。
-    /// </summary>
-    void DrawLevelConfirmPopupsImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの階層オブジェクト編集を描画する。
-    /// </summary>
-    void DrawLevelObjectsSectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの遅延履歴と自動保存を処理する。
-    /// </summary>
-    void FlushLevelEditorDeferredActions(LevelEditorImGuiState& state);
-
-    /// <summary>
     /// ImGuiでシーン内スプライトの生成と削除を行う。
     /// </summary>
     void DrawSceneSpriteEditImGui();
@@ -430,7 +363,6 @@ private:
     /// 開発ビルドでポストエフェクトの検証用切り替え入力を処理する。
     /// </summary>
     void HandlePostProcessShortcutInput();
-
 
     /// <summary>
     /// 分身チュートリアル用オブジェクトを初期化する。
@@ -786,10 +718,6 @@ private:
     /// シーン内の3Dオブジェクトを更新する。
     /// </summary>
     void UpdateSceneObjects(float deltaTime);
-    /// <summary>
-    /// シーン内3Dオブジェクトの衝突判定を更新する。
-    /// </summary>
-    void UpdateSceneCollisions();
 
     /// <summary>
     /// パーティクル描画用オブジェクトを初期化する
@@ -857,61 +785,6 @@ private:
     void InitializeSkyBox();
 
     /// <summary>
-    /// 3Dオブジェクトの初期設定を適用する。
-    /// </summary>
-    void ApplySceneObjectInitialSettings(MyEngine::Object3d& object3d, const std::string& modelFileName);
-
-    /// <summary>
-    /// 指定したモデルファイル名からシーン用3Dオブジェクトを生成する
-    /// </summary>
-    void CreateSceneObject(const std::string& modelFileName);
-
-    /// <summary>
-    /// レベルデータ内のオブジェクト一覧からシーン用3Dオブジェクトを生成する。
-    /// </summary>
-    void CreateSceneObjectsFromLevelData(const std::vector<MyEngine::LevelObjectData>& objectDataList);
-
-    /// <summary>
-    /// レベルデータ内の1オブジェクトからシーン用3Dオブジェクトを生成する。
-    /// </summary>
-    void CreateSceneObjectFromLevelData(const MyEngine::LevelObjectData& objectData);
-
-    /// <summary>
-    /// 既存のシーン用3DオブジェクトへレベルデータのTransformとColliderを反映する。
-    /// </summary>
-    bool ApplyLevelDataToExistingSceneObjects(const std::vector<MyEngine::LevelObjectData>& objectDataList, size_t& objectIndex);
-
-    /// <summary>
-    /// 現在のシーン用3DオブジェクトのTransformをレベルデータへ書き戻す。
-    /// </summary>
-    bool SyncSceneObjectsToLevelData();
-
-    /// <summary>
-    /// 現在のレベルデータで参照しているモデルを事前読み込みする。
-    /// </summary>
-    bool PreloadLevelModels();
-
-    /// <summary>
-    /// 指定したシーン用3DオブジェクトをLevelDataのルートへ追加する。
-    /// </summary>
-    bool AppendSceneObjectToLevelData(size_t objectIndex);
-
-    /// <summary>
-    /// 指定したシーン用3Dオブジェクトに対応するLevelData内MESHを削除する。
-    /// </summary>
-    bool RemoveSceneObjectFromLevelData(size_t objectIndex);
-
-    /// <summary>
-    /// 既存のシーン用3Dオブジェクトをレベルデータ階層へ順番に書き戻す。
-    /// </summary>
-    bool SyncSceneObjectsToLevelDataRecursive(std::vector<MyEngine::LevelObjectData>& objectDataList, size_t& objectIndex, const Math::Transform& parentTransform);
-
-    /// <summary>
-    /// 指定した番号のシーン用3Dオブジェクトを削除する
-    /// </summary>
-    void DeleteSceneObject(size_t objectIndex);
-
-    /// <summary>
     /// 指定したテクスチャ名からシーン用スプライトを生成する。
     /// </summary>
     void CreateSceneSprite(const std::string& textureName);
@@ -920,57 +793,6 @@ private:
     /// 指定した番号のシーン用スプライトを削除する。
     /// </summary>
     void DeleteSceneSprite(size_t spriteIndex);
-
-    /// <summary>
-    /// 現在の3DオブジェクトをクリアしてレベルJSONから作り直す。
-    /// </summary>
-    bool ReloadLevelSceneObjects();
-
-    /// <summary>
-    /// 現在保持しているレベルデータをシーン用3Dオブジェクトへ反映する。
-    /// </summary>
-    bool ApplyLevelDataToScene(bool applyCameraStart = false);
-
-    /// <summary>
-    /// 現在保持しているレベルデータの集計情報を更新する。
-    /// </summary>
-    void RefreshLevelDataSummary();
-
-    /// <summary>
-    /// 現在のレベルデータをJSONスナップショットとして保存する。
-    /// </summary>
-    bool SaveLevelSnapshot();
-
-    /// <summary>
-    /// レベルJSONの読み込み状態を記録する。
-    /// </summary>
-    void SetLevelLoadStatus(bool succeeded, const std::string& message);
-
-    /// <summary>
-    /// レベルJSONの保存状態を記録する。
-    /// </summary>
-    void SetLevelSaveStatus(bool succeeded, const std::string& message);
-
-    /// <summary>
-    /// LevelDataが未保存状態になったことを記録する。
-    /// </summary>
-    void MarkLevelDataDirty(const std::string& message, bool appliedToScene);
-
-    /// <summary>
-    /// MESH順の番号からLevelData内のオブジェクトを取得する。
-    /// </summary>
-    MyEngine::LevelObjectData* FindLevelMeshObjectByIndex(size_t objectIndex);
-
-    /// <summary>
-    /// MESH順の番号からLevelData内のオブジェクトを再帰的に取得する。
-    /// </summary>
-    MyEngine::LevelObjectData* FindLevelMeshObjectByIndexRecursive(std::vector<MyEngine::LevelObjectData>& objectDataList, size_t targetMeshIndex, size_t& currentMeshIndex);
-
-    /// <summary>
-    /// LevelDataの選択コライダーを対応するObject3dへ反映する。
-    /// </summary>
-    void ApplyLevelColliderEditToSceneObject(size_t objectIndex, const MyEngine::LevelObjectData& objectData);
-
 
     /// <summary>
     /// ポストプロセス描画が利用できるか判定する
@@ -1045,15 +867,6 @@ private:
     /// シーン内の3D要素を描画する
     /// </summary>
     void DrawSceneContent();
-    /// <summary>
-    /// 登録済みの3Dオブジェクトを描画する。
-    /// </summary>
-    void DrawSceneObjects();
-
-    /// <summary>
-    /// 所有中の3Dオブジェクトから参照用ビューを作り直す。
-    /// </summary>
-    void RebuildObjectPointerView();
 
     /// <summary>
     /// 所有中のスプライトから参照用ビューを作り直す。
@@ -1104,34 +917,14 @@ private: // メンバー変数
     static constexpr bool kEnableLegacyPreview = false; // 旧検証用の常時発生粒子・通常スプライト・補助描画を有効にするか
 
     MyEngine::SceneContext ctx_;
-    MyEngine::LevelData levelData_; // Blenderから読み込んだレベルデータ
-    std::string levelDataFileName_; // 読み込み対象のレベルJSONファイル名
-    std::string levelSaveFileName_; // 読み書き共通化後の保存先確認用レベルJSONファイル名
-    bool levelLoadSucceeded_ = false; // 直近のレベルJSON読み込みが成功したか
-    std::string levelLoadMessage_; // 直近のレベルJSON読み込み状態メッセージ
-    bool levelSaveSucceeded_ = false; // 直近のレベルJSON保存が成功したか
-    std::string levelSaveMessage_; // 直近のレベルJSON保存状態メッセージ
-    bool levelDirty_ = false; // LevelDataに未保存の編集があるか
-    bool levelAppliedToScene_ = false; // 現在のLevelDataがシーンへ反映済みか
-    size_t levelTotalObjectCount_ = 0; // レベルJSONに含まれる総オブジェクト数
-    size_t levelMeshObjectCount_ = 0; // レベルJSONから生成対象になったMesh数
-    size_t levelColliderObjectCount_ = 0; // レベルJSONに含まれる有効コライダー数
-    size_t levelDisabledObjectCount_ = 0; // レベルJSONで無効化されているオブジェクト数
-    size_t levelSpawnPointCount_ = 0; // レベルJSONに含まれるスポーン地点数
-    size_t levelEventTriggerCount_ = 0; // レベルJSONに含まれるイベントトリガー数
-    size_t levelCameraStartCount_ = 0; // レベルJSONに含まれる開始カメラ数
     std::vector<std::unique_ptr<MyEngine::Sprite>> sprites_;
     std::vector<MyEngine::Sprite*> spritePointerView_; // ImGuiなど外部参照用のスプライト一覧
     uint32_t nextSpriteId_ = 1; // 次に生成するスプライトへ割り当てるID
     std::vector<std::unique_ptr<MyEngine::Object3d>> objects3d_;
-    std::vector<MyEngine::Object3d*> objectPointerView_; // ImGuiなど外部参照用の3Dオブジェクト一覧
     uint32_t nextObjectId_ = 1; // 次に生成する3Dオブジェクトへ割り当てるID
-    MyEngine::CollisionSystem collisionSystem_; // シーン内3Dオブジェクトの衝突判定管理
-    size_t lastCollisionPairCount_ = 0; // 直近フレームで衝突していたペア数
     Player player_; // 分身チュートリアルを操作するプレイヤー
     PastSelfTutorialRoute pastSelfTutorialRoute_ = PastSelfTutorialRoute::FinalChallenge; // 現在選択中のチュートリアルルート
     StageRuleSettings pastSelfTutorialStageRules_; // 分身チュートリアルステージへ適用する調整可能なルール
-    LevelEditorImGuiState levelEditorImGuiState_; // このシーンだけの編集履歴と入力状態
     PlaySceneObjectEditorState objectEditorState_; // このシーンだけの表示オブジェクト編集選択
     PastSelfTutorialState pastSelfTutorialState_; // 寿命別に分類したチュートリアルの進行状態
     ClonePlatformCourseState clonePlatformCourseState_; // 区間内のリセットでも保持するコース進捗

@@ -342,12 +342,6 @@
     <ClCompile Include="application\scenes\PlaySceneLevelEditor.cpp">
       <Filter>ソース ファイル\application\scenes</Filter>
     </ClCompile>
-    <ClCompile Include="application\scenes\PlaySceneLevelEditorHierarchy.cpp">
-      <Filter>ソース ファイル\application\scenes</Filter>
-    </ClCompile>
-    <ClCompile Include="application\scenes\PlaySceneLevelEditorOverlay.cpp">
-      <Filter>ソース ファイル\application\scenes</Filter>
-    </ClCompile>
     <ClCompile Include="application\scenes\PlaySceneEffect.cpp">
       <Filter>ソース ファイル\application\scenes</Filter>
     </ClCompile>
@@ -685,12 +679,6 @@
     </ClInclude>
     <ClInclude Include="application\gimmicks\StageGimmickTransformUtility.h">
       <Filter>ヘッダー ファイル\application\gimmicks</Filter>
-    </ClInclude>
-    <ClInclude Include="application\scenes\PlaySceneLevelEditorOverlay.h">
-      <Filter>ヘッダー ファイル\application\scenes</Filter>
-    </ClInclude>
-    <ClInclude Include="application\scenes\PlaySceneLevelEditorHierarchy.h">
-      <Filter>ヘッダー ファイル\application\scenes</Filter>
     </ClInclude>
     <ClInclude Include="application\effects\EffectProgress.h">
       <Filter>ヘッダー ファイル\application\effects</Filter>

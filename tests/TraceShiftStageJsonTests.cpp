@@ -1,5 +1,4 @@
 #include "application/scenes/TraceShiftStageJson.h"
-#include "application/scenes/PlaySceneEditorState.h"
 #include "application/gimmicks/StageGimmickTransformUtility.h"
 #include <algorithm>
 #include <fstream>
@@ -261,15 +260,6 @@ int main()
         Check(data.gimmicks[0].hasUpperTranslate && data.gimmicks[0].translate.y == 2
             && data.gimmicks[0].upperTranslate.y == 5, "Elevator endpoints changed");
 
-        PlaySceneLevelEditorState first; // 最初のシーンの編集状態
-        PlaySceneLevelEditorState second; // 別シーンの独立した編集状態
-        first.levelUndoHistory.emplace_back();
-        first.selectedLevelObjectPaths.push_back("object/0");
-        first.pendingLevelAutoSave = true;
-        Check(second.levelUndoHistory.empty() && second.selectedLevelObjectPaths.empty()
-            && !second.pendingLevelAutoSave, "Editor state leaked between instances");
-        first = {};
-        Check(first.levelUndoHistory.empty() && !first.pendingLevelAutoSave, "Editor state reset failed");
         std::cout << "TraceShiftStageJson tests passed\n";
         return 0;
     } catch (const std::exception& exception) {
