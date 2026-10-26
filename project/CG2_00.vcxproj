@@ -464,6 +464,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="application\scenes\PastSelfTutorialState.h" />
     <ClInclude Include="application\scenes\PastSelfTutorialLayoutUtility.h" />
     <ClInclude Include="application\scenes\StageRuleSettings.h" />
+    <ClInclude Include="application\scenes\ClonePlatformCourseState.h" />
     <ClInclude Include="application\player\Player.h" />
     <ClInclude Include="application\player\PlayerState.h" />
     <ClInclude Include="application\player\PastSelfRecorder.h" />

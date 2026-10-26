@@ -218,6 +218,27 @@ void Player::ApplyExternalTranslation(const Math::Vector3& translation)
 }
 
 /// <summary>
+/// 上面に乗っている場合だけ移動足場へ追従し、横や下からの接触では移動しない。
+/// </summary>
+bool Player::ResolveMovingStandablePlatform(const StandablePlatform& previousPlatform, const StandablePlatform& currentPlatform)
+{
+    if (!previousPlatform.enabled || !currentPlatform.enabled || !state_.isGrounded) {
+        return false;
+    }
+    const Vector3 playerHalfSize = CalculateBodyHalfSize(state_.transform); // 接地判定に使う本体半サイズ
+    const float footY = state_.transform.translate.y - playerHalfSize.y; // 移動前の足元高さ
+    const float platformTopY = previousPlatform.center.y + previousPlatform.halfSize.y; // 移動前の足場上面高さ
+    if (!HasHorizontalOverlap(state_.transform.translate, playerHalfSize, previousPlatform) ||
+        std::fabs(footY - platformTopY) > kPlatformSnapTolerance) {
+        return false;
+    }
+    const SolidCollider previousCollider { previousPlatform.center, previousPlatform.halfSize, previousPlatform.enabled }; // 既存追従処理へ渡す移動前の上面
+    const SolidCollider currentCollider { currentPlatform.center, currentPlatform.halfSize, currentPlatform.enabled }; // 既存追従処理へ渡す移動後の上面
+    ResolveMovingSolidCollider(previousCollider, currentCollider);
+    return true;
+}
+
+/// <summary>
 /// 移動前後のコライダーから追従と重なりの排斥を解決する。
 /// </summary>
 void Player::ResolveMovingSolidCollider(const SolidCollider& previousCollider, const SolidCollider& currentCollider)

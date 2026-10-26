@@ -12,6 +12,7 @@
 #include "../player/PastSelfRecorder.h"
 #include "../player/Player.h"
 #include "StageRuleSettings.h"
+#include "ClonePlatformCourseState.h"
 #include "TraceShiftStageJson.h"
 #include "PlaySceneEditorState.h"
 #include "PastSelfTutorialState.h"
@@ -30,6 +31,7 @@ class SpriteCommon;
 class Object3dCommon;
 class Camera;
 class SkyBox;
+class SoundClip;
 }
 
 #include "../../engine/particle/ParticleEmitter.h"
@@ -138,6 +140,7 @@ public: // メンバ関数
     void FillParticleEmitterPointers(std::vector<::ParticleEmitter*>* out) override;
 
 private:
+
     /// <summary>
     /// 分身チュートリアル用のステージブロック。
     /// </summary>
@@ -147,7 +150,7 @@ private:
         SolidCollider collider; // 地形として全面衝突する情報
         Math::Vector4 baseColor { 1.0f, 1.0f, 1.0f, 1.0f }; // 通常時の表示色
         uint32_t routeMask = 0; // このブロックを使用するチュートリアルルート
-        bool oneCloneGoalPlatform = false; // 1体ルートの到達床として色を切り替えるか
+        bool oneCloneGoalPlatform = false; // 1体ルートの到達判定とクリア時の変色に使う床か
         bool goalMarker = false; // ゴール表示用のブロックか
     };
 
@@ -187,7 +190,7 @@ private:
     /// 分身チュートリアルで使用する攻略ルート種別。
     /// </summary>
     enum class PastSelfTutorialRoute {
-        OneCloneBasics, // 分身1体でトグル昇降床を攻略するルート
+        OneCloneBasics, // 足場・移動・再合流を順に学ぶ分身足場コース
         TwoCloneCooperation, // 分身2体で緑と青のスイッチを同時起動するルート
         FinalChallenge, // すべてのギミックを確認する総合ルート
     };
@@ -370,7 +373,6 @@ private:
     /// </summary>
     void HandlePostProcessShortcutInput();
 
-
     /// <summary>
     /// 分身チュートリアル用オブジェクトを初期化する。
     /// </summary>
@@ -452,6 +454,11 @@ private:
     void UpdatePastSelfTutorial(float deltaTime);
 
     /// <summary>
+    /// ゲーム進行を変えずにステージとプレイヤーの描画行列を更新する。
+    /// </summary>
+    void UpdatePastSelfTutorialVisuals();
+
+    /// <summary>
     /// 分身チュートリアル用の分身ギミックを初期化する。
     /// </summary>
     void InitializePastSelfTutorialMechanics();
@@ -530,6 +537,21 @@ private:
     /// 選択中のチュートリアルルートで指定されたステージブロックを使用するか判定する。
     /// </summary>
     bool IsPastSelfTutorialStageBlockEnabled(size_t blockIndex) const;
+
+    /// <summary>
+    /// 現在区間の到達床を、JSON内のコース順から取得する。
+    /// </summary>
+    const PastSelfTutorialStageBlock* GetClonePlatformCourseGoal() const;
+
+    /// <summary>
+    /// 到達床への接地で記録を消して次区間へ進み、最終区間だけクリアする。
+    /// </summary>
+    void UpdateClonePlatformCourse();
+
+    /// <summary>
+    /// コースの区間とプレイヤーの再挑戦位置を最初へ戻す。
+    /// </summary>
+    void ResetClonePlatformCourse();
 
     /// <summary>
     /// 選択中のチュートリアルルートに応じたカメラ注視対象を取得する。
@@ -900,7 +922,6 @@ private:
     /// </summary>
     void ApplyLevelColliderEditToSceneObject(size_t objectIndex, const MyEngine::LevelObjectData& objectData);
 
-
     /// <summary>
     /// ポストプロセス描画が利用できるか判定する
     /// </summary>
@@ -1063,6 +1084,7 @@ private: // メンバー変数
     LevelEditorImGuiState levelEditorImGuiState_; // このシーンだけの編集履歴と入力状態
     PlaySceneObjectEditorState objectEditorState_; // このシーンだけの表示オブジェクト編集選択
     PastSelfTutorialState pastSelfTutorialState_; // 寿命別に分類したチュートリアルの進行状態
+    ClonePlatformCourseState clonePlatformCourseState_; // 区間内のリセットでも保持するコース進捗
     int lastAutoOpenedStageObjectIndex_ = -1; // ステージ編集で最後に自動展開した選択番号
     PastSelfRecorder pastSelfRecorder_; // 分身用のプレイヤー状態記録
     PastSelfCloneManager pastSelfCloneManager_; // 記録済み状態を再生するチュートリアル用分身の管理クラス
@@ -1074,7 +1096,7 @@ private: // メンバー変数
     std::string pastSelfTutorialStageFileMessage_; // 直近の読み書き結果
     bool pastSelfTutorialStageFileSucceeded_ = false; // 直近の読み書きに成功したか
     bool pastSelfTutorialAutoCameraFollow_ = true; // プレイヤーと攻略対象へゲーム用カメラを自動追従させるか
-    BoxSwitchGimmick pastSelfTutorialSwitch_; // 分身専用スイッチギミック
+    BoxSwitchGimmick pastSelfTutorialSwitch_; // プレイヤーと分身が共通で押せる通常スイッチギミック
     LinkedDoorGimmick pastSelfTutorialDoor_; // スイッチ連動扉ギミック
     TimedSwitchGimmick pastSelfTutorialTimedSwitch_; // 時間差スイッチギミック
     LinkedDoorGimmick pastSelfTutorialTimedDoor_; // 時間差スイッチ連動扉ギミック

@@ -113,7 +113,6 @@ void BoxSwitchGimmick::Initialize(Object3dCommon* object3dCommon, ImGuiManager* 
     volumeHalfSize_ = desc.volumeHalfSize;
     inactiveColor_ = desc.inactiveColor;
     activeColor_ = desc.activeColor;
-    playerOnlyColor_ = desc.playerOnlyColor;
     object_ = CreateGimmickObject(object3dCommon, imguiManager, desc.objectId, desc.modelFileName, desc.scale, desc.translate, inactiveColor_);
     editorBasis_ = { desc.scale, desc.translate, desc.volumeCenter, desc.volumeHalfSize };
     Reset();
@@ -145,7 +144,7 @@ void BoxSwitchGimmick::Update(const PlayerState& playerState, std::span<const Pl
     cloneOnSwitch_ = std::any_of(cloneStates.begin(), cloneStates.end(), [this](const PlayerState& cloneState) {
         return Contains(cloneState);
     });
-    active_ = cloneOnSwitch_;
+    active_ = playerOnSwitch_ || cloneOnSwitch_;
     ApplyVisual();
 }
 
@@ -201,13 +200,7 @@ void BoxSwitchGimmick::ApplyVisual()
         return;
     }
 
-    Math::Vector4 color = inactiveColor_; // 現在状態から選択した表示色
-    if (cloneOnSwitch_) {
-        color = activeColor_;
-    } else if (playerOnSwitch_) {
-        color = playerOnlyColor_;
-    }
-    object_->SetMaterialColor(color);
+    object_->SetMaterialColor(active_ ? activeColor_ : inactiveColor_);
 }
 
 /// <summary>
@@ -428,7 +421,7 @@ void ToggleSwitchGimmick::ApplyVisual()
 }
 
 /// <summary>
-/// 重さスイッチの表示、判定範囲、色を初期化する。
+/// 重さスイッチの表示、判定範囲、色、必要重量を初期化する。
 /// </summary>
 void WeightSwitchGimmick::Initialize(Object3dCommon* object3dCommon, ImGuiManager* imguiManager, const WeightSwitchGimmickDesc& desc)
 {
@@ -437,6 +430,7 @@ void WeightSwitchGimmick::Initialize(Object3dCommon* object3dCommon, ImGuiManage
     inactiveColor_ = desc.inactiveColor;
     partialColor_ = desc.partialColor;
     activeColor_ = desc.activeColor;
+    requiredWeight_ = std::isfinite(desc.requiredWeight) && desc.requiredWeight > 0.0f ? desc.requiredWeight : 2.0f;
     object_ = CreateGimmickObject(object3dCommon, imguiManager, desc.objectId, desc.modelFileName, desc.scale, desc.translate, inactiveColor_);
     editorBasis_ = { desc.scale, desc.translate, desc.volumeCenter, desc.volumeHalfSize };
     Reset();
@@ -460,15 +454,18 @@ void WeightSwitchGimmick::ApplyEditorTransform()
 }
 
 /// <summary>
-/// プレイヤーと可視分身の位置からスイッチ状態を更新する。
+/// 本体と可視分身の重量を合計し、必要重量以上ならスイッチを作動させる。
 /// </summary>
 void WeightSwitchGimmick::Update(const PlayerState& playerState, std::span<const PlayerState> cloneStates)
 {
+    constexpr float kActorWeight = 1.0f; // 本体と各分身に共通の一体あたりの重量
     playerOnSwitch_ = Contains(playerState);
-    cloneOnSwitch_ = std::any_of(cloneStates.begin(), cloneStates.end(), [this](const PlayerState& cloneState) {
+    const auto cloneCount = std::count_if(cloneStates.begin(), cloneStates.end(), [this](const PlayerState& cloneState) { // 判定内にいる可視分身の数
         return Contains(cloneState);
     });
-    active_ = playerOnSwitch_ && cloneOnSwitch_;
+    cloneOnSwitch_ = cloneCount > 0;
+    currentWeight_ = (static_cast<float>(cloneCount) + (playerOnSwitch_ ? 1.0f : 0.0f)) * kActorWeight;
+    active_ = currentWeight_ >= requiredWeight_;
     ApplyVisual();
 }
 
@@ -504,7 +501,22 @@ void WeightSwitchGimmick::Reset()
     active_ = false;
     playerOnSwitch_ = false;
     cloneOnSwitch_ = false;
+    currentWeight_ = 0.0f;
     ApplyVisual();
+}
+
+/// <summary>
+/// 正の有限値だけを必要重量として設定し、現在の作動状態へ反映する。
+/// </summary>
+bool WeightSwitchGimmick::SetRequiredWeight(float requiredWeight)
+{
+    if (!std::isfinite(requiredWeight) || requiredWeight <= 0.0f) {
+        return false;
+    }
+    requiredWeight_ = requiredWeight;
+    active_ = currentWeight_ >= requiredWeight_;
+    ApplyVisual();
+    return true;
 }
 
 /// <summary>
@@ -527,7 +539,7 @@ void WeightSwitchGimmick::ApplyVisual()
     Math::Vector4 color = inactiveColor_; // 現在状態から選択した表示色
     if (active_) {
         color = activeColor_;
-    } else if (playerOnSwitch_ || cloneOnSwitch_) {
+    } else if (currentWeight_ > 0.0f) {
         color = partialColor_;
     }
     object_->SetMaterialColor(color);

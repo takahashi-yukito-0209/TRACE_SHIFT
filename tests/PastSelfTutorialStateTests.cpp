@@ -34,7 +34,6 @@ PastSelfTutorialState MakeState(uint32_t seed)
     state.gimmicks.switchActive = (NextRandom(seed) & 1u) != 0;
     state.gimmicks.doorOpen = (NextRandom(seed) & 1u) != 0;
     state.gimmicks.goalReached = (NextRandom(seed) & 1u) != 0;
-    state.gimmicks.doorUnlockedByClone = (NextRandom(seed) & 1u) != 0;
     state.gimmicks.playerOnSwitch = (NextRandom(seed) & 1u) != 0;
     state.gimmicks.cloneOnSwitch = (NextRandom(seed) & 1u) != 0;
     state.gimmicks.timedSwitchActive = (NextRandom(seed) & 1u) != 0;
@@ -84,14 +83,13 @@ PastSelfTutorialState MakeState(uint32_t seed)
 }
 
 /// <summary>
-/// 移動した全49項目を比較する。
+/// 現在の状態データの全項目を比較する。
 /// </summary>
 bool IsSameState(const PastSelfTutorialState& left, const PastSelfTutorialState& right)
 {
     return left.gimmicks.switchActive == right.gimmicks.switchActive
         && left.gimmicks.doorOpen == right.gimmicks.doorOpen
         && left.gimmicks.goalReached == right.gimmicks.goalReached
-        && left.gimmicks.doorUnlockedByClone == right.gimmicks.doorUnlockedByClone
         && left.gimmicks.playerOnSwitch == right.gimmicks.playerOnSwitch
         && left.gimmicks.cloneOnSwitch == right.gimmicks.cloneOnSwitch
         && left.gimmicks.timedSwitchActive == right.gimmicks.timedSwitchActive
@@ -148,7 +146,6 @@ void LegacyResetPuzzle(PastSelfTutorialState& state)
     state.gimmicks.goalReached = false;
     state.gimmicks.switchActive = false;
     state.gimmicks.doorOpen = false;
-    state.gimmicks.doorUnlockedByClone = false;
     state.gimmicks.playerOnSwitch = false;
     state.gimmicks.cloneOnSwitch = false;
     state.progress.doorBlockedBeforeClone = false;
@@ -194,9 +191,9 @@ void LegacyResetPuzzle(PastSelfTutorialState& state)
 }
 
 /// <summary>
-/// 整理前の再生準備を状態データだけで再現する。
+/// 扉を閉じて実績を保持する再生準備の期待状態を作成する。
 /// </summary>
-void LegacyPrepareReplay(PastSelfTutorialState& state, bool registerPrepareAction, size_t cloneCount, float feedbackDuration)
+void ExpectedPrepareReplay(PastSelfTutorialState& state, bool registerPrepareAction, size_t cloneCount, float feedbackDuration)
 {
     const bool keepDoorBlocked = state.progress.doorBlockedBeforeClone; // 記録前に閉じた扉へ阻まれた実証結果
     const bool keepClonePlatformUsed = state.progress.clonePlatformUsed; // 分身足場を利用した実証結果
@@ -211,11 +208,9 @@ void LegacyPrepareReplay(PastSelfTutorialState& state, bool registerPrepareActio
     const bool keepRecordStopped = state.progress.recordStopped; // 記録停止を示す実証結果
     const bool keepPrepareUsed = state.progress.prepareUsed; // Prepare操作を示す実証結果
     const bool keepReplayStarted = state.progress.replayStarted; // 再生開始を示す実証結果
-    const bool keepDoorUnlocked = keepDoorOpenedByClone; // 再生済み分身で開放した通常扉状態
     state.gimmicks.goalReached = false;
     state.gimmicks.switchActive = false;
-    state.gimmicks.doorOpen = keepDoorUnlocked;
-    state.gimmicks.doorUnlockedByClone = keepDoorUnlocked;
+    state.gimmicks.doorOpen = false;
     state.gimmicks.playerOnSwitch = false;
     state.gimmicks.cloneOnSwitch = false;
     state.progress.doorBlockedBeforeClone = keepDoorBlocked;
@@ -359,9 +354,9 @@ int main()
                 for (bool registerPrepareAction : { false, true }) {
                     expected = initial;
                     actual = initial;
-                    LegacyPrepareReplay(expected, registerPrepareAction, cloneCount, 1.5f);
+                    ExpectedPrepareReplay(expected, registerPrepareAction, cloneCount, 1.5f);
                     actual.PrepareReplay(registerPrepareAction, cloneCount, 1.5f);
-                    Check(IsSameState(expected, actual), "Replay reset differs from legacy behavior");
+                    Check(IsSameState(expected, actual), "Replay reset differs from momentary door rules");
                 }
             }
         }
@@ -370,9 +365,9 @@ int main()
         state.progress.doorOpenedByClone = true;
         state.progress.goalBridgeUnlocked = true;
         state.PrepareReplay(true, 2, 1.5f);
-        Check(state.replay.twoCloneReplayPrepared && state.gimmicks.doorOpen
-            && state.gimmicks.doorUnlockedByClone && state.gimmicks.goalBridgeDeployed,
-            "Unlocked state or two-clone preparation was lost");
+        Check(state.replay.twoCloneReplayPrepared && !state.gimmicks.doorOpen
+            && !state.gimmicks.switchActive && state.progress.doorOpenedByClone && state.gimmicks.goalBridgeDeployed,
+            "Replay must close the door while preserving achievements and the bridge");
         state.PrepareReplay(false, 2, 1.5f);
         Check(!state.replay.twoCloneReplayPrepared && state.replay.prepareFeedbackSeconds == 0.0f
             && state.progress.prepareUsed, "Silent preparation changed accumulated progress");

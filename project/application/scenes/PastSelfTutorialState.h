@@ -8,12 +8,11 @@
 /// ギミックの現在状態。通常リセットと再生準備で初期化する。
 /// </summary>
 struct PastSelfTutorialGimmickState {
-    bool switchActive = false; // 分身専用スイッチが押されているか
+    bool switchActive = false; // プレイヤーまたは分身が通常スイッチを押しているか
     bool doorOpen = false; // 通常扉が開いているか
     bool goalReached = false; // ゴールに到達したか
-    bool doorUnlockedByClone = false; // 分身入力で通常扉を開放済みか
-    bool playerOnSwitch = false; // プレイヤーが分身専用スイッチ上にいるか
-    bool cloneOnSwitch = false; // 分身が分身専用スイッチ上にいるか
+    bool playerOnSwitch = false; // プレイヤーが通常スイッチ上にいるか
+    bool cloneOnSwitch = false; // 分身が通常スイッチ上にいるか
     bool timedSwitchActive = false; // 時間差スイッチが起動中か
     bool timedSwitchCloneOn = false; // 分身が時間差スイッチ上にいるか
     bool timedDoorOpen = false; // 時間差扉が開いているか
@@ -148,14 +147,12 @@ struct PastSelfTutorialState {
     }
 
     /// <summary>
-    /// 実績と計測値を残して再生準備し、解放済みの扉と橋を復元する。
+    /// 実績と計測値を残して再生準備し、解放済みの橋だけを復元する。
     /// </summary>
     void PrepareReplay(bool registerPrepareAction, size_t cloneCount, float feedbackDuration)
     {
         gimmicks = {};
         replay = {};
-        gimmicks.doorOpen = progress.doorOpenedByClone;
-        gimmicks.doorUnlockedByClone = progress.doorOpenedByClone;
         gimmicks.goalBridgeDeployed = progress.goalBridgeUnlocked;
         replay.twoCloneReplayPrepared = registerPrepareAction && progress.recordTakeCount == 2 && cloneCount == 2;
         replay.prepareFeedbackSeconds = registerPrepareAction ? feedbackDuration : 0.0f;
