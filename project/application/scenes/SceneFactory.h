@@ -12,18 +12,14 @@ struct StageSelectionState;
 class SceneFactory {
 public:
     /// <summary>
-    /// ビルド設定に応じてシーンへの入場を許可するか判定する。
+    /// 指定されたシーン名が生成対象として登録されているか判定する。
     /// </summary>
     static bool IsSceneAvailable(const std::string& name)
     {
         if (name == "Title" || name == "StageSelect") {
             return true;
         }
-#ifdef TRACE_SHIFT_PREVIEW_ONLY
-        return false;
-#else
         return name == "Play";
-#endif
     }
 
     /// <summary>

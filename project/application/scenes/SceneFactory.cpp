@@ -1,8 +1,6 @@
 #include "SceneFactory.h"
 #include "StageSelectionState.h"
-#ifndef TRACE_SHIFT_PREVIEW_ONLY
 #include "PlayScene.h"
-#endif
 #include "TitleScene.h"
 
 using namespace GameApp;
@@ -26,9 +24,7 @@ std::unique_ptr<IScene> SceneFactory::Create(const std::string& name, std::share
     } else if (name == "StageSelect") {
         return std::make_unique<TitleScene>(stageSelection, true);
     } else if (name == "Play") {
-#ifndef TRACE_SHIFT_PREVIEW_ONLY
         return std::make_unique<PlayScene>(stageSelection);
-#endif
     }
 
     // 存在しない名前の場合は nullptr を返す
