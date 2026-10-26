@@ -88,7 +88,7 @@ public:
     std::vector<PlayerState> GetVisibleStates() const;
 
     /// <summary>
-    /// プレイヤーが乗れる可視分身の足場一覧を取得する。
+    /// 保存順の分身足場一覧を取得する。非表示の足場は無効状態で保持する。
     /// </summary>
     std::vector<StandablePlatform> GetStandablePlatforms() const;
 

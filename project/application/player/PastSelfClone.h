@@ -17,6 +17,7 @@ class Object3dCommon;
 /// </summary>
 class PastSelfClone {
 public:
+    inline static constexpr float kAfterPlaybackSeconds = 1.0f; // 再生終了後に残像と判定を残す時間
     /// <summary>
     /// コンストラクタ
     /// </summary>
@@ -68,9 +69,14 @@ public:
     void Pause();
 
     /// <summary>
-    /// 分身の再生状態を更新する。
+    /// 記録を再生し、終端後はその位置で薄くなって消えるまで更新する。
     /// </summary>
     void Update(float deltaTime, const std::vector<StandablePlatform>& standablePlatforms);
+
+    /// <summary>
+    /// 再生終了後の残像が消えるまでの進行率を取得する。
+    /// </summary>
+    float GetFadeProgress() const;
 
     /// <summary>
     /// 現在の分身状態を表示用Object3dへ反映する。
@@ -131,7 +137,12 @@ private:
     /// <summary>
     /// 上面足場への着地だけを再生後の分身状態へ反映する。
     /// </summary>
-    void ResolveLandingOnPlatforms(float previousFootY, const std::vector<StandablePlatform>& standablePlatforms);
+    bool ResolveLandingOnPlatforms(float previousFootY, const std::vector<StandablePlatform>& standablePlatforms);
+
+    /// <summary>
+    /// 終端後の位置を保持し、残像の寿命と表示・判定の消失を更新する。
+    /// </summary>
+    void UpdateAfterPlayback(float deltaTime);
 
     /// <summary>
     /// 再生状態に応じた分身表示色を反映する。
@@ -145,6 +156,8 @@ private:
     Math::Vector4 finishedMaterialColor_ { 0.9f, 0.45f, 1.0f, 0.5f }; // 再生終了後の分身表示色
     float playbackTime_ = 0.0f; // 現在の再生時刻
     float playbackSpeed_ = 1.0f; // 再生速度
+    float afterPlaybackSeconds_ = 0.0f; // 記録終端後に残像として経過した時間
+    bool isPaused_ = false; // 明示的な一時停止と自然な再生終了を区別する状態
     bool loopPlayback_ = false; // 終端でループするか
     bool isPlaying_ = false; // 再生中か
     bool isVisible_ = false; // 描画するか
