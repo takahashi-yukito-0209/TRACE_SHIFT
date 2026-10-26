@@ -16,6 +16,7 @@
 #include "TraceShiftStageJson.h"
 #include "PlaySceneEditorState.h"
 #include "PastSelfTutorialState.h"
+#include "StageSelectionState.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -44,7 +45,7 @@ public: // メンバ関数
     /// <summary>
     /// コンストラクタ
     /// </summary>
-    PlayScene();
+    explicit PlayScene(std::shared_ptr<GameApp::StageSelectionState> stageSelection = nullptr);
 
     /// <summary>
     /// デストラクタ
@@ -140,6 +141,12 @@ public: // メンバ関数
     void FillParticleEmitterPointers(std::vector<::ParticleEmitter*>* out) override;
 
 private:
+    std::shared_ptr<GameApp::StageSelectionState> stageSelection_; // 選択画面と共有する起動中の攻略履歴
+
+    /// <summary>
+    /// 提出用の到達判定を検出し、クリア履歴を記録せずタイトルへ戻す。
+    /// </summary>
+    bool HandleStageCompletion();
 
     /// <summary>
     /// 分身チュートリアル用のステージブロック。

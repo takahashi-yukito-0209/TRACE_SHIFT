@@ -423,7 +423,10 @@ bool ShouldLoadTextureOnStartup(const char* textureName)
 /// <summary>
 /// コンストラクタ
 /// </summary>
-PlayScene::PlayScene() { }
+PlayScene::PlayScene(std::shared_ptr<GameApp::StageSelectionState> stageSelection)
+    : stageSelection_(stageSelection)
+{
+}
 
 /// <summary>
 /// デストラクタ
@@ -970,6 +973,13 @@ void PlayScene::Initialize(const SceneContext& ctx)
     InitializeSkyBox();
     InitializeSceneObjects();
     InitializePastSelfTutorial();
+    if (stageSelection_) {
+        const std::array<PastSelfTutorialRoute, GameApp::kSelectableStageCount> routes {
+            PastSelfTutorialRoute::OneCloneBasics, PastSelfTutorialRoute::TwoCloneCooperation, PastSelfTutorialRoute::FinalChallenge
+        }; // 選択画面の項目と既存ルートの対応
+        stageSelection_->selectedStageIndex = (std::min)(stageSelection_->selectedStageIndex, routes.size() - 1);
+        SelectPastSelfTutorialRoute(routes[stageSelection_->selectedStageIndex]);
+    }
     InitializeParticleObjects();
     if (kUsePostEffectPreviewScene) {
         InitializeParticleManager();
@@ -1175,6 +1185,18 @@ void PlayScene::UpdatePostEffectCenters()
 /// </summary>
 void PlayScene::Update(float dt)
 {
+    if (ctx_.isSceneTransitionActive && ctx_.isSceneTransitionActive()) {
+        // 明転中は操作とゲーム進行を止め、初期化後の描画行列だけ整える。
+        if (ctx_.camera) {
+            ctx_.camera->Update();
+        }
+        UpdatePastSelfTutorialVisuals();
+        UpdateSceneObjects(0.0f);
+        return;
+    }
+    if (HandleStageCompletion()) {
+        return;
+    }
     if (!kUsePostEffectPreviewScene) {
         HandleEffectStartInput();
     }
@@ -1185,6 +1207,9 @@ void PlayScene::Update(float dt)
         ctx_.camera->Update();
     }
     UpdatePastSelfTutorial(dt);
+    if (HandleStageCompletion()) {
+        return;
+    }
     UpdatePostEffectCenters();
     UpdateParticleSystems(dt);
 
@@ -1242,10 +1267,16 @@ void PlayScene::Draw()
         return;
     }
 
+    if (ctx_.beginSceneTransition) {
+        ctx_.beginSceneTransition(-1);
+    }
     DrawSceneContent();
     DrawDebugLines3D();
     DrawSprites();
     DrawDebugLines2D();
+    if (ctx_.drawSceneTransition) {
+        ctx_.drawSceneTransition();
+    }
 }
 
 /// <summary>

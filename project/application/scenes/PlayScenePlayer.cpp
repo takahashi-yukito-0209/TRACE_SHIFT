@@ -1895,6 +1895,9 @@ void PlayScene::DrawPastSelfTutorialRouteSelector()
 /// </summary>
 void PlayScene::SelectPastSelfTutorialRoute(PastSelfTutorialRoute route)
 {
+    if (stageSelection_) {
+        stageSelection_->selectedStageIndex = static_cast<size_t>(route);
+    }
     if (pastSelfTutorialRoute_ == route) {
         return;
     }
@@ -1914,6 +1917,18 @@ void PlayScene::SelectPastSelfTutorialRoute(PastSelfTutorialRoute route)
     }
     pastSelfRecorder_.SetMaxRecordTime(pastSelfTutorialStageRules_.maxRecordTime);
     ResetPastSelfTutorialState();
+}
+
+/// <summary>
+/// 提出用の到達判定を検出し、クリア履歴を記録せずタイトルへ戻す。
+/// </summary>
+bool PlayScene::HandleStageCompletion()
+{
+    if (!ctx_.requestSceneChange || !IsPastSelfTutorialSelectedRouteComplete()) {
+        return false;
+    }
+    ctx_.requestSceneChange("Title");
+    return true;
 }
 
 /// <summary>

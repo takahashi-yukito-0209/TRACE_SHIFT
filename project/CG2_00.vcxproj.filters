@@ -360,6 +360,9 @@
     <ClCompile Include="application\effects\TemporalRiftEffect.cpp">
       <Filter>ソース ファイル\application\effects</Filter>
     </ClCompile>
+    <ClCompile Include="application\scenes\TitleSceneStageSelect.cpp">
+      <Filter>ソース ファイル\application\scenes</Filter>
+    </ClCompile>
     <ClCompile Include="application\scenes\TitleScene.cpp">
       <Filter>ソース ファイル\application\scenes</Filter>
     </ClCompile>
@@ -694,6 +697,9 @@
     </ClInclude>
     <ClInclude Include="application\effects\TemporalRiftEffect.h">
       <Filter>ヘッダー ファイル\application\effects</Filter>
+    </ClInclude>
+    <ClInclude Include="application\scenes\StageSelectionState.h">
+      <Filter>ヘッダー ファイル\application\scenes</Filter>
     </ClInclude>
     <ClInclude Include="application\scenes\TitleScene.h">
       <Filter>ヘッダー ファイル\application\scenes</Filter>

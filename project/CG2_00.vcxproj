@@ -265,6 +265,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="application\effects\TemporalRiftEffect.cpp" />
     <ClCompile Include="application\scenes\SceneFactory.cpp" />
     <ClCompile Include="application\scenes\TitleScene.cpp" />
+    <ClCompile Include="application\scenes\TitleSceneStageSelect.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="resources\shaders\DebugLine.PS.hlsl">
@@ -482,6 +483,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="application\effects\TemporalRiftEffect.h" />
     <ClInclude Include="application\scenes\SceneFactory.h" />
     <ClInclude Include="application\scenes\TitleScene.h" />
+    <ClInclude Include="application\scenes\StageSelectionState.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\imgui\LICENSE.txt" />

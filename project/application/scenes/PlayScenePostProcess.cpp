@@ -271,12 +271,18 @@ void PlayScene::EndSceneViewRenderTargetIfNeeded(bool useFinalRenderTarget)
 /// </summary>
 void PlayScene::DrawPostProcessOutputToCurrentTarget(const PostProcessDrawContext& drawContext)
 {
+    if (ctx_.beginSceneTransition) {
+        ctx_.beginSceneTransition(drawContext.useFinalRenderTarget ? finalRenderTarget_.GetHandle() : -1);
+    }
     DrawFinalPostProcessPass(
         drawContext.sourceSrvIndex,
         drawContext.finalEffectType,
         drawContext.useGaussianFilter);
     DrawSprites();
     DrawDebugLines2D();
+    if (ctx_.drawSceneTransition) {
+        ctx_.drawSceneTransition();
+    }
 }
 
 /// <summary>
