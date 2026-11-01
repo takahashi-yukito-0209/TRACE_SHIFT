@@ -83,6 +83,26 @@ private: // メンバ変数
     /// </summary>
     void InitializeScene();
 
+    /// <summary>
+    /// 重複要求を防ぎ、シーン切り替え前の暗転を開始する。
+    /// </summary>
+    void RequestSceneChange(const std::string& sceneName);
+
+    /// <summary>
+    /// シーン切り替え前後のフェード透明度を更新する。
+    /// </summary>
+    void UpdateSceneTransition(float dt);
+
+    /// <summary>
+    /// 遷移中の最終画面を専用描画先へ集める。
+    /// </summary>
+    void BeginSceneTransition(int outputTargetHandle);
+
+    /// <summary>
+    /// 現在の描画先へ画像なしの黒いフェードを重ねる。
+    /// </summary>
+    void DrawSceneTransition();
+
     struct Impl;
     std::unique_ptr<Impl> impl_ = nullptr; // 実装の隠蔽
 };

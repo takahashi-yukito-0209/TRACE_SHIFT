@@ -252,12 +252,11 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="application\player\PastSelfCloneManager.cpp" />
     <ClCompile Include="application\gimmicks\StageGimmicks.cpp" />
     <ClCompile Include="application\scenes\PlaySceneDraw.cpp" />
+    <ClCompile Include="application\scenes\PlayScenePause.cpp" />
     <ClCompile Include="application\scenes\PlaySceneEditorImGui.cpp" />
     <ClCompile Include="application\scenes\PlayScenePostProcess.cpp" />
     <ClCompile Include="application\scenes\PlaySceneParticle.cpp" />
     <ClCompile Include="application\scenes\PlaySceneLevelEditor.cpp" />
-    <ClCompile Include="application\scenes\PlaySceneLevelEditorHierarchy.cpp" />
-    <ClCompile Include="application\scenes\PlaySceneLevelEditorOverlay.cpp" />
     <ClCompile Include="application\scenes\PlaySceneEffect.cpp" />
     <ClCompile Include="application\effects\EffectParticleUtility.cpp" />
     <ClCompile Include="application\effects\TimeStopEffect.cpp" />
@@ -265,6 +264,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="application\effects\TemporalRiftEffect.cpp" />
     <ClCompile Include="application\scenes\SceneFactory.cpp" />
     <ClCompile Include="application\scenes\TitleScene.cpp" />
+    <ClCompile Include="application\scenes\TitleSceneStageSelect.cpp" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="resources\shaders\DebugLine.PS.hlsl">
@@ -464,15 +464,18 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="application\scenes\PastSelfTutorialState.h" />
     <ClInclude Include="application\scenes\PastSelfTutorialLayoutUtility.h" />
     <ClInclude Include="application\scenes\StageRuleSettings.h" />
+    <ClInclude Include="application\scenes\ClonePlatformCourseState.h" />
+    <ClInclude Include="application\scenes\StageStartSequenceState.h" />
+    <ClInclude Include="application\scenes\StageFailureSequenceState.h" />
+    <ClInclude Include="application\scenes\PauseMenuState.h" />
     <ClInclude Include="application\player\Player.h" />
     <ClInclude Include="application\player\PlayerState.h" />
     <ClInclude Include="application\player\PastSelfRecorder.h" />
     <ClInclude Include="application\player\PastSelfClone.h" />
     <ClInclude Include="application\player\PastSelfCloneManager.h" />
     <ClInclude Include="application\gimmicks\StageGimmicks.h" />
+    <ClInclude Include="application\gimmicks\HazardAreaUtility.h" />
     <ClInclude Include="application\gimmicks\StageGimmickTransformUtility.h" />
-    <ClInclude Include="application\scenes\PlaySceneLevelEditorOverlay.h" />
-    <ClInclude Include="application\scenes\PlaySceneLevelEditorHierarchy.h" />
     <ClInclude Include="application\effects\EffectProgress.h" />
     <ClInclude Include="application\effects\EffectImGuiUtility.h" />
     <ClInclude Include="application\effects\EffectParticleUtility.h" />
@@ -481,6 +484,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="application\effects\TemporalRiftEffect.h" />
     <ClInclude Include="application\scenes\SceneFactory.h" />
     <ClInclude Include="application\scenes\TitleScene.h" />
+    <ClInclude Include="application\scenes\StageSelectionState.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\imgui\LICENSE.txt" />

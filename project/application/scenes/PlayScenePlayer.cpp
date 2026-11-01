@@ -1,5 +1,6 @@
 #include "PlayScene.h"
 #include "PastSelfTutorialLayoutUtility.h"
+#include "../gimmicks/HazardAreaUtility.h"
 
 #include "ImGuiManager.h"
 #include "../../engine/3d/Camera.h"
@@ -62,6 +63,7 @@ struct PastSelfTutorialStageBlockDesc {
     Math::Vector4 color; // ステージブロックの表示色
     bool collidable; // 全面コライダーとして使うか
     bool goalMarker; // ゴール表示用のブロックか
+    bool courseCheckpoint = false; // 分身足場コースで次区間へ進む到達床か
 };
 
 
@@ -96,6 +98,21 @@ constexpr std::array<const char*, 11> kPastSelfTutorialStageBlockEditorLabels = 
     "Goal Approach Platform",
     "Goal Marker",
 }; // ステージ編集一覧へ表示するブロック名
+constexpr std::array<PastSelfTutorialStageBlockDesc, 9> kClonePlatformTrialBlocks = { {
+    { { 18.0f, 0.3f, 4.0f }, { -6.0f, -0.15f, 0.0f }, { 0.65f, 0.72f, 0.78f, 1.0f }, true, false },
+    { { 4.0f, 0.3f, 4.0f }, { -1.8f, 2.5f, 0.0f }, { 1.0f, 0.72f, 0.3f, 1.0f }, true, false, true },
+    { { 18.0f, 0.3f, 4.0f }, { 18.0f, -0.15f, 0.0f }, { 0.65f, 0.72f, 0.78f, 1.0f }, true, false },
+    { { 2.0f, 0.3f, 4.0f }, { 13.0f, 0.85f, 0.0f }, { 0.42f, 0.62f, 0.72f, 1.0f }, true, false },
+    { { 4.0f, 0.3f, 4.0f }, { 22.2f, 2.5f, 0.0f }, { 1.0f, 0.72f, 0.3f, 1.0f }, true, false, true },
+    { { 24.0f, 0.3f, 4.0f }, { 44.0f, -0.15f, 0.0f }, { 0.65f, 0.72f, 0.78f, 1.0f }, true, false },
+    { { 2.0f, 0.3f, 4.0f }, { 37.0f, 0.85f, 0.0f }, { 0.42f, 0.62f, 0.72f, 1.0f }, true, false },
+    { { 3.5f, 0.3f, 4.0f }, { 42.75f, 1.4f, 0.0f }, { 0.48f, 0.58f, 0.68f, 1.0f }, true, false },
+    { { 4.0f, 0.3f, 4.0f }, { 50.0f, 2.5f, 0.0f }, { 1.0f, 0.72f, 0.3f, 1.0f }, true, false, true },
+} }; // 足場・移動・再合流の順で進み、各到達床で記録を消す三つの課題
+constexpr std::array<const char*, 9> kClonePlatformTrialBlockLabels = {
+    "Course 01 Safety Floor", "Course 01 Exit", "Course 02 Safety Floor", "Course 02 Boarding Platform", "Course 02 Exit",
+    "Course 03 Safety Floor", "Course 03 Boarding Platform", "Course 03 Bypass Roof", "Course 03 Exit",
+}; // JSON読み込み失敗時にも使用する第一ステージのブロック名
 constexpr Math::Vector3 kPastSelfTutorialGoalCenter = { 15.55f, 3.7f, 0.0f }; // ゴール判定の中心
 constexpr Math::Vector3 kPastSelfTutorialGoalHalfSize = { 0.75f, 1.0f, 1.25f }; // ゴール判定の半サイズ
 constexpr Math::Vector3 kPastSelfTutorialSwitchScale = { 2.0f, 0.12f, 2.7f }; // スイッチの表示サイズ
@@ -106,7 +123,6 @@ constexpr Math::Vector3 kPastSelfTutorialDoorScale = { 0.35f, 2.9f, 3.1f }; // �
 constexpr Math::Vector3 kPastSelfTutorialDoorTranslate = { 3.25f, 2.75f, 0.0f }; // 扉の中心座標
 constexpr Math::Vector4 kPastSelfTutorialSwitchInactiveColor = { 0.03f, 0.16f, 0.08f, 1.0f }; // 押されていないスイッチ色
 constexpr Math::Vector4 kPastSelfTutorialSwitchActiveColor = { 0.0f, 1.0f, 0.32f, 1.0f }; // 押されているスイッチ色
-constexpr Math::Vector4 kPastSelfTutorialSwitchPlayerOnlyColor = { 1.0f, 0.62f, 0.12f, 1.0f }; // プレイヤーだけが乗っているスイッチ色
 constexpr Math::Vector4 kPastSelfTutorialDoorClosedColor = { 0.0f, 0.55f, 0.18f, 1.0f }; // 閉じている扉色
 constexpr Math::Vector4 kPastSelfTutorialDoorOpenColor = { 0.3f, 1.0f, 0.52f, 0.48f }; // 開いている扉色
 constexpr Math::Vector4 kPastSelfTutorialGoalClearColor = { 1.0f, 0.88f, 0.12f, 1.0f }; // クリア済みのゴール色
@@ -146,8 +162,9 @@ constexpr Math::Vector3 kPastSelfTutorialWeightSwitchTranslate = { 11.4f, 2.76f,
 constexpr Math::Vector3 kPastSelfTutorialWeightSwitchVolumeCenter = { 11.4f, 3.26f, 0.0f }; // 重さスイッチ入力を受ける範囲中心
 constexpr Math::Vector3 kPastSelfTutorialWeightSwitchVolumeHalfSize = { 0.95f, 0.7f, 1.45f }; // 重さスイッチ入力を受ける範囲半サイズ
 constexpr Math::Vector4 kPastSelfTutorialWeightSwitchInactiveColor = { 0.32f, 0.22f, 0.04f, 1.0f }; // 重さスイッチ未入力時の表示色
-constexpr Math::Vector4 kPastSelfTutorialWeightSwitchPartialColor = { 1.0f, 0.62f, 0.12f, 1.0f }; // 重さスイッチ片方入力時の表示色
-constexpr Math::Vector4 kPastSelfTutorialWeightSwitchActiveColor = { 1.0f, 0.9f, 0.12f, 1.0f }; // 重さスイッチ両方入力時の表示色
+constexpr Math::Vector4 kPastSelfTutorialWeightSwitchPartialColor = { 1.0f, 0.62f, 0.12f, 1.0f }; // 必要重量に足りない時の表示色
+constexpr Math::Vector4 kPastSelfTutorialWeightSwitchActiveColor = { 1.0f, 0.9f, 0.12f, 1.0f }; // 必要重量を満たした時の表示色
+constexpr float kPastSelfTutorialWeightSwitchRequiredWeight = 2.0f; // 黄色スイッチの必要重量。本体・分身はそれぞれ重量1
 constexpr Math::Vector3 kPastSelfTutorialGoalBridgeScale = { 3.0f, 0.12f, 4.0f }; // ゴール前の連動橋の表示サイズ
 constexpr Math::Vector3 kPastSelfTutorialGoalBridgeTranslate = { 14.2f, 2.64f, 0.0f }; // ゴール前の連動橋の中心座標
 constexpr Math::Vector4 kPastSelfTutorialGoalBridgeRetractedColor = { 0.32f, 0.22f, 0.04f, 0.18f }; // 未展開時の連動橋色
@@ -408,11 +425,16 @@ bool IsPlayerStandingOnClonePlatform(const PlayerState& playerState, const std::
 /// </summary>
 void PlayScene::InitializePastSelfTutorial()
 {
+    clonePlatformCourseState_.Reset();
     InitializePastSelfTutorialStage();
     InitializePastSelfTutorialMechanics();
     ApplyPastSelfTutorialGimmickLayouts();
     pastSelfRecorder_.SetMaxRecordTime(pastSelfTutorialStageRules_.maxRecordTime);
     player_.Initialize(ctx_.object3dCommon, ctx_.imguiManager, kPastSelfTutorialModelFileName);
+    stageStartBody_ = std::make_unique<Object3d>();
+    stageStartBody_->Initialize(ctx_.object3dCommon, ctx_.imguiManager);
+    stageStartBody_->SetModel(kPastSelfTutorialModelFileName);
+    stageStartBody_->SetUseAlphaDiscard(false);
     player_.SetMaterialColor(kPastSelfTutorialNormalPlayerColor);
     PlayerState playerStartState = player_.GetState(); // チュートリアルステージに合わせた開始状態
     playerStartState.transform.translate = kPastSelfTutorialStartTranslate;
@@ -466,13 +488,15 @@ void PlayScene::InitializePastSelfTutorialStage()
     for (size_t blockIndex = 0; blockIndex < kPastSelfTutorialStageBlockDescs.size(); ++blockIndex) {
         const PastSelfTutorialStageBlockDesc& blockDesc = kPastSelfTutorialStageBlockDescs[blockIndex]; // フォールバック用の固定ブロック情報
         uint32_t routeMask = kPastSelfTutorialFinalRouteMask; // このブロックを使用するルート
-        if (blockIndex <= 2) {
-            routeMask |= kPastSelfTutorialOneCloneRouteMask;
-        }
         if (blockIndex >= 2 && blockIndex <= 8) {
             routeMask |= kPastSelfTutorialTwoCloneRouteMask;
         }
         AppendPastSelfTutorialStageBlock(kPastSelfTutorialStageBlockEditorLabels[blockIndex], blockDesc.scale, { 0.0f, 0.0f, 0.0f }, blockDesc.translate, blockDesc.color, blockDesc.collidable, blockIndex == 0, blockDesc.goalMarker, routeMask);
+    }
+    for (size_t blockIndex = 0; blockIndex < kClonePlatformTrialBlocks.size(); ++blockIndex) { // 第一ステージ専用のフォールバック地形番号
+        const PastSelfTutorialStageBlockDesc& blockDesc = kClonePlatformTrialBlocks[blockIndex]; // 検証部屋の固定配置
+        AppendPastSelfTutorialStageBlock(kClonePlatformTrialBlockLabels[blockIndex], blockDesc.scale, {}, blockDesc.translate,
+            blockDesc.color, blockDesc.collidable, blockDesc.courseCheckpoint, false, kPastSelfTutorialOneCloneRouteMask);
     }
 
     pastSelfTutorialStageFileSucceeded_ = false;
@@ -491,6 +515,7 @@ bool PlayScene::ReloadPastSelfTutorialStage()
     }
     ConfigurePastSelfTutorialGoal();
     ApplyPastSelfTutorialGimmickLayouts();
+    ResetClonePlatformCourse();
     ResetPastSelfTutorialState();
     return true;
 }
@@ -526,7 +551,8 @@ bool PlayScene::LoadPastSelfTutorialStage()
     pastSelfTutorialStageBlocks_.clear();
     pastSelfTutorialStageBlocks_.reserve(loadedStage.blocks.size());
     for (const TraceShiftStageJson::BlockData& blockData : loadedStage.blocks) {
-        AppendPastSelfTutorialStageBlock(blockData.name, blockData.scale, blockData.rotate, blockData.translate, blockData.color, blockData.collidable, blockData.oneCloneGoalPlatform, blockData.goalMarker, blockData.routeMask);
+        const size_t blockIndex = AppendPastSelfTutorialStageBlock(blockData.name, blockData.scale, blockData.rotate, blockData.translate, blockData.color, blockData.collidable, blockData.oneCloneGoalPlatform, blockData.goalMarker, blockData.routeMask); // 読み込んだブロックの保存位置
+        pastSelfTutorialStageBlocks_[blockIndex].hazard = blockData.hazard;
     }
     pastSelfTutorialGimmickLayouts_ = std::move(loadedStage.gimmicks);
     pastSelfTutorialStageFileSucceeded_ = true;
@@ -581,6 +607,7 @@ bool PlayScene::SavePastSelfTutorialStage()
         block.collidable = stageBlock.collider.enabled;
         block.oneCloneGoalPlatform = stageBlock.oneCloneGoalPlatform;
         block.goalMarker = stageBlock.goalMarker;
+        block.hazard = stageBlock.hazard;
         block.routeMask = stageBlock.routeMask;
         stageData.blocks.push_back(std::move(block));
     }
@@ -743,7 +770,10 @@ size_t PlayScene::DuplicatePastSelfTutorialStageBlock(size_t blockIndex)
     }
     PastSelfTutorialStageBlock& sourceBlock = pastSelfTutorialStageBlocks_[blockIndex]; // 複製元のステージブロック
     const Math::Vector3 duplicatedTranslate = sourceBlock.object->GetTranslate() + Math::Vector3 { 0.5f, 0.5f, 0.0f }; // 元と重ならない複製座標
-    return AppendPastSelfTutorialStageBlock(sourceBlock.name + " Copy", sourceBlock.object->GetScale(), sourceBlock.object->GetRotate(), duplicatedTranslate, sourceBlock.baseColor, sourceBlock.collider.enabled, false, false, sourceBlock.routeMask);
+    const bool isHazard = sourceBlock.hazard; // 配列の再確保より前に保持する複製元の危険属性
+    const size_t duplicatedIndex = AppendPastSelfTutorialStageBlock(sourceBlock.name + " Copy", sourceBlock.object->GetScale(), sourceBlock.object->GetRotate(), duplicatedTranslate, sourceBlock.baseColor, sourceBlock.collider.enabled, false, false, sourceBlock.routeMask); // 生成した複製の番号
+    pastSelfTutorialStageBlocks_[duplicatedIndex].hazard = isHazard;
+    return duplicatedIndex;
 }
 
 /// <summary>
@@ -763,7 +793,7 @@ bool PlayScene::DeletePastSelfTutorialStageBlock(size_t blockIndex)
 /// </summary>
 void PlayScene::InitializePastSelfTutorialMechanics()
 {
-    BoxSwitchGimmickDesc switchDesc {}; // 分身専用スイッチの初期化情報
+    BoxSwitchGimmickDesc switchDesc {}; // プレイヤーと分身が押せる通常スイッチの初期化情報
     switchDesc.objectId = IssueObjectId();
     switchDesc.modelFileName = kPastSelfTutorialModelFileName;
     switchDesc.scale = kPastSelfTutorialSwitchScale;
@@ -772,7 +802,6 @@ void PlayScene::InitializePastSelfTutorialMechanics()
     switchDesc.volumeHalfSize = kPastSelfTutorialSwitchVolumeHalfSize;
     switchDesc.inactiveColor = kPastSelfTutorialSwitchInactiveColor;
     switchDesc.activeColor = kPastSelfTutorialSwitchActiveColor;
-    switchDesc.playerOnlyColor = kPastSelfTutorialSwitchPlayerOnlyColor;
 
     LinkedDoorGimmickDesc doorDesc {}; // スイッチ連動扉の初期化情報
     doorDesc.objectId = IssueObjectId();
@@ -844,6 +873,7 @@ void PlayScene::InitializePastSelfTutorialMechanics()
     weightSwitchDesc.inactiveColor = kPastSelfTutorialWeightSwitchInactiveColor;
     weightSwitchDesc.partialColor = kPastSelfTutorialWeightSwitchPartialColor;
     weightSwitchDesc.activeColor = kPastSelfTutorialWeightSwitchActiveColor;
+    weightSwitchDesc.requiredWeight = kPastSelfTutorialWeightSwitchRequiredWeight;
 
     LinkedBridgeGimmickDesc goalBridgeDesc {}; // 重さスイッチに連動するゴール前の橋の初期化情報
     goalBridgeDesc.objectId = IssueObjectId();
@@ -885,6 +915,13 @@ void PlayScene::InitializePastSelfTutorialMechanics()
 /// </summary>
 void PlayScene::UpdatePastSelfTutorialMechanics(float deltaTime)
 {
+    if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
+        if (HasHazardAreasForCurrentRoute()) {
+            pastSelfTutorialSwitch_.Update(player_.GetState(), pastSelfCloneManager_.GetVisibleStates());
+            pastSelfTutorialState_.gimmicks.switchActive = pastSelfTutorialSwitch_.IsActive();
+        }
+        return;
+    }
     const PlayerState& playerState = player_.GetState(); // ギミック判定に使う現在のプレイヤー状態
     const std::vector<PlayerState> cloneStates = pastSelfCloneManager_.GetVisibleStates(); // ギミック入力に使用する可視分身状態一覧
     const std::span<const PlayerState> cloneStateView { cloneStates }; // ギミックへ渡す分身状態の参照範囲
@@ -898,10 +935,7 @@ void PlayScene::UpdatePastSelfTutorialMechanics(float deltaTime)
     pastSelfTutorialState_.gimmicks.playerOnSwitch = pastSelfTutorialSwitch_.IsPlayerOnSwitch();
     pastSelfTutorialState_.gimmicks.cloneOnSwitch = pastSelfTutorialSwitch_.IsCloneOnSwitch();
     pastSelfTutorialState_.gimmicks.switchActive = pastSelfTutorialSwitch_.IsActive();
-    if (playbackCloneVisible && pastSelfTutorialState_.gimmicks.switchActive) {
-        pastSelfTutorialState_.gimmicks.doorUnlockedByClone = true;
-    }
-    pastSelfTutorialDoor_.Update(pastSelfTutorialState_.gimmicks.doorUnlockedByClone);
+    pastSelfTutorialDoor_.Update(pastSelfTutorialState_.gimmicks.switchActive);
     pastSelfTutorialState_.gimmicks.doorOpen = pastSelfTutorialDoor_.IsOpen();
 
     pastSelfTutorialTimedSwitch_.Update(deltaTime, timedSwitchInputView);
@@ -921,14 +955,6 @@ void PlayScene::UpdatePastSelfTutorialMechanics(float deltaTime)
     pastSelfTutorialState_.gimmicks.toggleGateOpen = pastSelfTutorialToggleGate_.IsOpen();
     pastSelfTutorialToggleElevator_.Update(deltaTime, pastSelfTutorialState_.gimmicks.toggleSwitchActive);
     pastSelfTutorialState_.gimmicks.toggleElevatorActive = pastSelfTutorialToggleElevator_.IsActive();
-    const bool oneCloneTutorialEligible = pastSelfTutorialState_.progress.recordTakeCount == 1 &&
-        pastSelfCloneManager_.GetCloneCount() == 1 && pastSelfTutorialState_.progress.recordStopped &&
-        pastSelfTutorialState_.progress.prepareUsed && pastSelfTutorialState_.progress.replayStarted; // 1回の記録と1体の分身で再生準備まで行ったか
-    if (oneCloneTutorialEligible && pastSelfTutorialState_.gimmicks.toggleSwitchCloneOn && pastSelfTutorialState_.gimmicks.toggleSwitchActive &&
-        !pastSelfTutorialState_.replay.oneCloneToggleActivated) {
-        pastSelfTutorialState_.replay.oneCloneToggleActivated = true;
-        RegisterPastSelfTutorialCheckCompleted("Clone activated the orange toggle");
-    }
     pastSelfTutorialOneWayGate_.Update(player_.GetState());
     pastSelfTutorialState_.gimmicks.oneWayGateBlocking = pastSelfTutorialOneWayGate_.IsBlocking();
 
@@ -940,20 +966,20 @@ void PlayScene::UpdatePastSelfTutorialMechanics(float deltaTime)
         pastSelfTutorialState_.progress.timedDoorOpened = true;
         RegisterPastSelfTutorialCheckCompleted("Green and blue switches opened blue door");
     }
-    if (!pastSelfRecorder_.IsRecording() && cloneStates.size() >= 2 && pastSelfTutorialState_.gimmicks.switchActive && pastSelfTutorialState_.gimmicks.timedSwitchCloneOn) {
+    if (!pastSelfRecorder_.IsRecording() && cloneStates.size() >= 2 && pastSelfTutorialState_.gimmicks.cloneOnSwitch && pastSelfTutorialState_.gimmicks.timedSwitchCloneOn) {
         pastSelfTutorialState_.progress.dualCloneSwitchesActivated = true;
     }
     const bool twoCloneTutorialEligible = !pastSelfRecorder_.IsRecording() &&
         pastSelfTutorialState_.progress.recordTakeCount == 2 && pastSelfCloneManager_.GetCloneCount() == 2 &&
         pastSelfTutorialState_.progress.recordStopped && pastSelfTutorialState_.replay.twoCloneReplayPrepared; // 2回の記録と2体の分身で再生準備したか
-    if (twoCloneTutorialEligible && cloneStates.size() == 2 && pastSelfTutorialState_.gimmicks.switchActive &&
+    if (twoCloneTutorialEligible && cloneStates.size() == 2 && pastSelfTutorialState_.gimmicks.cloneOnSwitch &&
         pastSelfTutorialState_.gimmicks.timedSwitchCloneOn && !pastSelfTutorialState_.replay.twoCloneSwitchesActivated) {
         pastSelfTutorialState_.replay.twoCloneSwitchesActivated = true;
         RegisterPastSelfTutorialCheckCompleted("Two clones activated green and blue switches");
     }
     if (pastSelfTutorialState_.gimmicks.weightSwitchActive && !pastSelfTutorialState_.progress.weightSwitchActivated) {
         pastSelfTutorialState_.progress.weightSwitchActivated = true;
-        RegisterPastSelfTutorialCheckCompleted("Player and clone activated yellow switch");
+        RegisterPastSelfTutorialCheckCompleted("Required weight reached on yellow switch");
     }
     if (pastSelfTutorialState_.gimmicks.weightSwitchActive) {
         pastSelfTutorialState_.progress.goalBridgeUnlocked = true;
@@ -977,6 +1003,7 @@ void PlayScene::ResetPastSelfTutorialState()
     ResetPastSelfTutorialMechanics();
     pastSelfTutorialState_.ResetPuzzle();
     RefreshPastSelfTutorialAfterReset();
+    BeginStageStartPresentation(true);
 }
 
 /// <summary>
@@ -996,6 +1023,8 @@ void PlayScene::ResetPastSelfTutorialReplayState(bool registerPrepareAction)
 /// </summary>
 void PlayScene::ResetPastSelfTutorialMechanics()
 {
+    stageFailureHazardBlockIndex_.reset();
+    stageFailureImpactEnabled_ = false;
     pastSelfTutorialGoal_.Reset();
     pastSelfTutorialSwitch_.Reset();
     pastSelfTutorialDoor_.Reset();
@@ -1019,6 +1048,7 @@ void PlayScene::RefreshPastSelfTutorialAfterReset()
         player_.GetState(), {}, GetPastSelfTutorialRouteCameraTarget(player_.GetState())); // 開始地点と攻略対象を収める範囲
     pastSelfTutorialCameraFocus_ = cameraFrame.focus;
     pastSelfTutorialCameraDistance_ = cameraFrame.distance;
+    ConfigurePastSelfTutorialCamera(ctx_.camera, pastSelfTutorialCameraFocus_, pastSelfTutorialCameraDistance_);
     UpdatePastSelfTutorialMechanics(0.0f);
     ApplyPastSelfTutorialGoalVisual();
 }
@@ -1086,9 +1116,9 @@ void PlayScene::FinishPastSelfTutorialRecording()
 void PlayScene::UpdatePastSelfTutorialMechanicObjects(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix)
 {
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
-        pastSelfTutorialToggleSwitch_.UpdateObject(viewMatrix, projectionMatrix);
-        pastSelfTutorialToggleGate_.UpdateObject(viewMatrix, projectionMatrix);
-        pastSelfTutorialToggleElevator_.UpdateObject(viewMatrix, projectionMatrix);
+        if (HasHazardAreasForCurrentRoute()) {
+            pastSelfTutorialSwitch_.UpdateObject(viewMatrix, projectionMatrix);
+        }
         return;
     }
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::TwoCloneCooperation) {
@@ -1161,9 +1191,9 @@ void PlayScene::DrawPastSelfTutorialCloneRecordMarkers()
 void PlayScene::DrawPastSelfTutorialMechanics()
 {
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
-        pastSelfTutorialToggleSwitch_.Draw();
-        pastSelfTutorialToggleGate_.Draw();
-        pastSelfTutorialToggleElevator_.Draw();
+        if (HasHazardAreasForCurrentRoute()) {
+            pastSelfTutorialSwitch_.Draw();
+        }
         return;
     }
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::TwoCloneCooperation) {
@@ -1208,6 +1238,10 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
     if (canUndoLastClone && inputManager->IsKeyJustPressed(kCloneUndoKey)) {
         UndoLastPastSelfTutorialClone();
     }
+    if (stageStartSequence_.IsHolding()) {
+        UpdatePastSelfTutorialVisuals();
+        return;
+    }
 
     const bool canAcceptInput = !selectedRouteComplete && !blockInputByImGui; // プレイヤーと分身操作の入力を受け取れるか
     if (canAcceptInput && inputManager) {
@@ -1229,37 +1263,58 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
     }
 
     if (!selectedRouteComplete) {
+        const PlayerState previousPlayerState = player_.GetState(); // 足場追従を含む危険エリア接触判定の移動前状態
         pastSelfTutorialState_.progress.elapsedTime += deltaTime;
+        const std::vector<StandablePlatform> previousClonePlatforms = BuildPlayerStandablePlatforms(pastSelfCloneManager_); // 更新前の分身足場
         pastSelfCloneManager_.Update(deltaTime, BuildCloneStandablePlatforms(player_));
         UpdatePastSelfTutorialMechanics(deltaTime);
-        const SolidCollider previousElevatorCollider = pastSelfTutorialToggleElevator_.GetPreviousSolidCollider(); // 更新前の昇降足場コライダー
-        const SolidCollider currentElevatorCollider = pastSelfTutorialToggleElevator_.GetSolidCollider(); // 更新後の昇降足場コライダー
+        SolidCollider previousElevatorCollider = pastSelfTutorialToggleElevator_.GetPreviousSolidCollider(); // 更新前の昇降足場コライダー
+        SolidCollider currentElevatorCollider = pastSelfTutorialToggleElevator_.GetSolidCollider(); // 更新後の昇降足場コライダー
+        if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
+            previousElevatorCollider.enabled = false;
+            currentElevatorCollider.enabled = false;
+        }
         std::vector<SolidCollider> solidColliders; // プレイヤーが全面衝突する地形と扉
         AppendPastSelfTutorialSolidColliders(&solidColliders);
         player_.ResolveMovingSolidCollider(previousElevatorCollider, currentElevatorCollider);
         player_.ResolveExternalSolidCollisions(solidColliders, currentElevatorCollider);
         std::vector<StandablePlatform> standablePlatforms = BuildPlayerStandablePlatforms(pastSelfCloneManager_); // プレイヤーが上面だけ乗れる分身足場
+        // 乗っていた分身の移動だけを反映し、横や下からは押し出さない。
+        for (size_t platformIndex = 0; platformIndex < previousClonePlatforms.size() && platformIndex < standablePlatforms.size(); ++platformIndex) { // 保存順で対応する分身足場の番号
+            const StandablePlatform& previousPlatform = previousClonePlatforms[platformIndex]; // 移動前の足場
+            const StandablePlatform& currentPlatform = standablePlatforms[platformIndex]; // 移動後の足場
+            if (!player_.ResolveMovingStandablePlatform(previousPlatform, currentPlatform)) {
+                continue;
+            }
+            const SolidCollider currentCloneCollider { currentPlatform.center, currentPlatform.halfSize, currentPlatform.enabled }; // 既存の追従処理へ渡す移動後の上面
+            player_.ResolveExternalSolidCollisions(solidColliders, currentCloneCollider);
+            break;
+        }
         player_.Update(deltaTime, canAcceptInput, solidColliders, standablePlatforms);
-        const StandablePlatform toggleElevatorPlatform {
-            currentElevatorCollider.center,
-            currentElevatorCollider.halfSize,
-            currentElevatorCollider.enabled
-        }; // 昇降足場の上面利用を判定する足場情報
-        const bool playerStandingOnToggleElevator = IsPlayerStateStandingOnPlatform(player_.GetState(), toggleElevatorPlatform); // プレイヤーが昇降足場上に立っているか
-        if (pastSelfTutorialState_.replay.oneCloneToggleActivated && playerStandingOnToggleElevator &&
-            !pastSelfTutorialState_.replay.oneCloneElevatorRidden) {
-            pastSelfTutorialState_.replay.oneCloneElevatorRidden = true;
-            RegisterPastSelfTutorialCheckCompleted("Player rode the orange moving lift");
+        UpdatePastSelfTutorialMechanics(0.0f);
+        float hazardContactFraction = 1.0f; // この移動区間で最初に危険エリアへ触れた割合
+        size_t hazardBlockIndex = 0; // 最初に接触して発光させる危険エリアの番号
+        if (TryGetHazardContact(previousPlayerState, hazardContactFraction, hazardBlockIndex)) {
+            const Math::Vector3 correction = (previousPlayerState.transform.translate - player_.GetState().transform.translate)
+                * (1.0f - hazardContactFraction); // 接触後に進んだ分だけ戻す補正量
+            player_.ApplyExternalTranslation(correction);
+            BeginStageFailurePresentation();
+            stageFailureHazardBlockIndex_ = hazardBlockIndex;
+            stageFailureRecoilSide_ = player_.GetState().transform.translate.x
+                < pastSelfTutorialStageBlocks_[hazardBlockIndex].collider.center.x ? -1.0f : 1.0f;
+            const SolidCollider& area = pastSelfTutorialStageBlocks_[hazardBlockIndex].collider; // 接触した危険エリアの表面
+            const Math::Vector3 center = player_.GetState().transform.translate; // 接触位置へ補正済みの本体中心
+            const Math::Vector3 halfSize = CalculatePlayerStateHalfSize(player_.GetState()); // 本体の手前側を求める半サイズ
+            stageFailureContactPoint_ = {
+                std::clamp(center.x, area.center.x - area.halfSize.x, area.center.x + area.halfSize.x),
+                std::clamp(center.y, area.center.y - area.halfSize.y, area.center.y + area.halfSize.y),
+                (std::min)(center.z - halfSize.z, area.center.z - area.halfSize.z) - 0.03f,
+            };
+            stageFailureImpactEnabled_ = useFailureImpactFeedback_;
+            UpdatePastSelfTutorialVisuals();
+            return;
         }
-        constexpr float kElevatorEndpointTolerance = 0.05f; // 上端到達判定に許容する位置誤差
-        const bool elevatorAtUpperEndpoint = PastSelfTutorialLayoutUtility::IsAtUpperEndpoint(
-            pastSelfTutorialToggleElevator_.GetCurrentTranslate(), pastSelfTutorialToggleElevator_.GetEditorUpperTranslate(),
-            kElevatorEndpointTolerance); // 編集後の昇降範囲の上端へ到達しているか
-        if (pastSelfTutorialState_.replay.oneCloneElevatorRidden && playerStandingOnToggleElevator && elevatorAtUpperEndpoint &&
-            !pastSelfTutorialState_.replay.oneCloneBasicsComplete) {
-            pastSelfTutorialState_.replay.oneCloneBasicsComplete = true;
-            RegisterPastSelfTutorialCheckCompleted("One-clone tutorial route complete");
-        }
+        UpdateClonePlatformCourse();
         const Math::Vector3 playerHalfSize = CalculatePlayerStateHalfSize(player_.GetState()); // 青扉通過判定に使うプレイヤー半サイズ
         const SolidCollider timedDoorCollider = pastSelfTutorialTimedDoor_.GetSolidCollider(); // 開閉によらず現在の青扉の判定範囲を取得する
         const bool playerPassedTimedDoor = PastSelfTutorialLayoutUtility::HasPassedDoor(
@@ -1279,7 +1334,9 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
             RegisterPastSelfTutorialCheckCompleted("Player used a clone as a platform");
         }
         if (player_.GetState().transform.translate.y < kPastSelfTutorialFallResetY) {
-            ResetPastSelfTutorialState();
+            BeginStageFailurePresentation(StageFailureSequenceState::Cause::Fall);
+            UpdatePastSelfTutorialVisuals();
+            return;
         }
         const bool wasRecording = pastSelfRecorder_.IsRecording(); // 記録更新前に記録中だったか
         pastSelfRecorder_.Update(deltaTime, player_.GetState());
@@ -1299,9 +1356,17 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
     }
 
     if (pastSelfTutorialAutoCameraFollow_) {
-        const std::vector<PlayerState> visibleCloneStates = pastSelfCloneManager_.GetVisibleStates(); // カメラ範囲に含める可視分身状態一覧
+        std::vector<PlayerState> visibleCloneStates = pastSelfCloneManager_.GetVisibleStates(); // カメラ範囲に含める可視分身状態一覧
+        PlayerState cameraPlayerState = player_.GetState(); // 描画対象の位置を変えないカメラ計算専用の本体状態
+        if (!IsPastSelfTutorialCompletionEnabled()) {
+            constexpr float kFallCameraMinimumY = -2.0f; // 通路を残しつつ失敗確定時の本体も見せる注視対象の下限
+            cameraPlayerState.transform.translate.y = (std::max)(cameraPlayerState.transform.translate.y, kFallCameraMinimumY);
+            for (auto& cloneState : visibleCloneStates) { // 深い落下を追わないカメラ計算専用の分身状態
+                cloneState.transform.translate.y = (std::max)(cloneState.transform.translate.y, kFallCameraMinimumY);
+            }
+        }
         const PastSelfTutorialCameraFrame targetCameraFrame = CalculatePastSelfTutorialCameraFrame(
-            player_.GetState(), visibleCloneStates, GetPastSelfTutorialRouteCameraTarget(player_.GetState())); // 現在の攻略対象を収める目標カメラ範囲
+            cameraPlayerState, visibleCloneStates, GetPastSelfTutorialRouteCameraTarget(player_.GetState())); // 現在の攻略対象を収める目標カメラ範囲
         pastSelfTutorialCameraFocus_.x = FollowPastSelfTutorialCameraValue(pastSelfTutorialCameraFocus_.x, targetCameraFrame.focus.x, deltaTime);
         pastSelfTutorialCameraFocus_.y = FollowPastSelfTutorialCameraValue(pastSelfTutorialCameraFocus_.y, targetCameraFrame.focus.y, deltaTime);
         pastSelfTutorialCameraFocus_.z = FollowPastSelfTutorialCameraValue(pastSelfTutorialCameraFocus_.z, targetCameraFrame.focus.z, deltaTime);
@@ -1309,10 +1374,24 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
         ConfigurePastSelfTutorialCamera(ctx_.camera, pastSelfTutorialCameraFocus_, pastSelfTutorialCameraDistance_);
     }
 
+    UpdatePastSelfTutorialVisuals();
+}
+
+/// <summary>
+/// ゲーム進行を変えずにステージとプレイヤーの描画行列を更新する。
+/// </summary>
+void PlayScene::UpdatePastSelfTutorialVisuals()
+{
     if (!ctx_.camera) {
         return;
     }
 
+    if (pastSelfTutorialAutoCameraFollow_ && stageStartSequence_.IsArrivalVisible()) {
+        const float presentationDistance = pastSelfTutorialCameraDistance_ * stageStartSequence_.GetCameraDistanceScale(); // 通常の追従距離を変更しない開始演出用距離
+        ConfigurePastSelfTutorialCamera(ctx_.camera, pastSelfTutorialCameraFocus_, presentationDistance);
+    }
+
+    UpdateStageFailureCamera();
     const Math::Matrix4x4 viewMatrix = ctx_.camera->GetViewMatrix(); // プレイヤー更新に使用するビュー行列
     const Math::Matrix4x4 projectionMatrix = ctx_.camera->GetProjectionMatrix(); // プレイヤー更新に使用する射影行列
     UpdatePastSelfTutorialStage(viewMatrix, projectionMatrix);
@@ -1320,6 +1399,47 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
     UpdatePastSelfTutorialCloneRecordMarkers(viewMatrix, projectionMatrix);
     player_.UpdateObject(viewMatrix, projectionMatrix);
     pastSelfCloneManager_.UpdateObjects(viewMatrix, projectionMatrix);
+    UpdateStageStartPresentationVisuals();
+    UpdateStageFailureBodyVisuals(viewMatrix, projectionMatrix);
+    UpdateStageFailureSparks(viewMatrix, projectionMatrix);
+}
+
+/// <summary>
+/// 当たり判定を変えず、通常色の本体に接触時ののけぞりか落下時の姿勢崩れを表示する。
+/// </summary>
+void PlayScene::UpdateStageFailureBodyVisuals(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix)
+{
+    if (!stageFailureSequence_.IsActive() || stageFailureSequence_.HasRespawned() || !stageStartBody_) {
+        return;
+    }
+    const PlayerState& state = player_.GetState(); // 失敗地点に固定された判定側の本体状態
+    Math::Vector3 position = state.transform.translate; // 判定位置を変えない表示専用の中心
+    Math::Vector3 rotation = state.transform.rotate; // 元の姿勢へ失敗時の傾きを加えた表示角度
+    if (stageFailureSequence_.IsFall()) {
+        constexpr float kFallVisualHalfGravity = 9.0f; // 表示だけの落下加速度の半分
+        constexpr float kFallVisualTiltAngle = 0.28f; // 落ち抜ける際に姿勢を崩す角度
+        const float time = stageFailureSequence_.GetFallMotionSeconds(); // 暗転中も継続する表示だけの落下時間
+        const float progress = stageFailureSequence_.GetFallReactionProgress(); // 暗転前に姿勢を崩す進行率
+        position.y += stageFailureFallVelocity_ * time - kFallVisualHalfGravity * time * time;
+        rotation.z += kFallVisualTiltAngle * (1.0f - (1.0f - progress) * (1.0f - progress));
+    } else {
+        const float progress = stageFailureSequence_.GetRecoilProgress(); // 静止後の表示用のけぞりの進行率
+        const float eased = 1.0f - (1.0f - progress) * (1.0f - progress); // 動き出しを速くして終端で落ち着かせる補間率
+        const float tilt = -stageFailureRecoilSide_ * stageFailureSequence_.GetTiming().recoilAngle * eased; // のけぞる方向へ姿勢を崩す回転角
+        const float lift = (std::fabs(state.transform.scale.x) * std::fabs(std::sin(tilt))
+            + std::fabs(state.transform.scale.y) * (std::fabs(std::cos(tilt)) - 1.0f)) * 0.5f; // 傾いた本体の下端が床へ沈まない高さ補正
+        position.x += stageFailureRecoilSide_ * stageFailureSequence_.GetTiming().recoilDistance * eased;
+        position.y += (std::max)(lift, 0.0f) + stageFailureSequence_.GetTiming().recoilDistance * 0.23f * std::sin(progress * 3.14159265f);
+        rotation.z += tilt;
+    }
+    const float brightness = stageFailureSequence_.GetHitBrightness(); // 静止中だけ通常色を暗く明滅させる明るさ
+    stageStartBody_->SetTranslate(position);
+    stageStartBody_->SetRotate(rotation);
+    stageStartBody_->SetScale(state.transform.scale);
+    stageStartBody_->SetMaterialColor({ kPastSelfTutorialNormalPlayerColor.x * brightness,
+        kPastSelfTutorialNormalPlayerColor.y * brightness, kPastSelfTutorialNormalPlayerColor.z * brightness,
+        kPastSelfTutorialNormalPlayerColor.w });
+    stageStartBody_->Update(viewMatrix, projectionMatrix);
 }
 
 /// <summary>
@@ -1327,6 +1447,9 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
 /// </summary>
 void PlayScene::UpdatePastSelfTutorialStage(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix)
 {
+    const PastSelfTutorialStageBlock* courseGoal = pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics
+        ? GetClonePlatformCourseGoal() : nullptr; // 現在区間の到達床だけに開始時の発光を付ける参照
+    const float goalGlow = stageStartSequence_.GetGoalGlow(); // 停止中に一度明るくして戻す強度
     for (size_t blockIndex = 0; blockIndex < pastSelfTutorialStageBlocks_.size(); ++blockIndex) {
         if (!IsPastSelfTutorialStageBlockEnabled(blockIndex)) {
             continue;
@@ -1336,10 +1459,29 @@ void PlayScene::UpdatePastSelfTutorialStage(const Math::Matrix4x4& viewMatrix, c
             if (stageBlock.oneCloneGoalPlatform) {
                 const bool oneCloneUpperGoalComplete = pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics &&
                     pastSelfTutorialState_.replay.oneCloneBasicsComplete; // 1体用上段をクリア表示にするか
-                const Math::Vector4 upperGoalColor = oneCloneUpperGoalComplete
+                Math::Vector4 upperGoalColor = oneCloneUpperGoalComplete
                     ? kPastSelfTutorialGoalClearColor
                     : stageBlock.baseColor; // 1体用上段の攻略状態を示す表示色
+                if (&stageBlock == courseGoal && !oneCloneUpperGoalComplete) {
+                    upperGoalColor.x += (1.0f - upperGoalColor.x) * goalGlow;
+                    upperGoalColor.y += (1.0f - upperGoalColor.y) * goalGlow;
+                    upperGoalColor.z += (1.0f - upperGoalColor.z) * goalGlow;
+                }
                 stageBlock.object->SetMaterialColor(upperGoalColor);
+            } else if (stageBlock.goalMarker) {
+                Math::Vector4 goalColor = pastSelfTutorialState_.gimmicks.goalReached
+                    ? kPastSelfTutorialGoalClearColor : stageBlock.baseColor; // 最終ルートの通常色または達成色
+                if (!pastSelfTutorialState_.gimmicks.goalReached) {
+                    goalColor.x += (1.0f - goalColor.x) * goalGlow;
+                    goalColor.y += (1.0f - goalColor.y) * goalGlow;
+                    goalColor.z += (1.0f - goalColor.z) * goalGlow;
+                }
+                stageBlock.object->SetMaterialColor(goalColor);
+            } else if (stageBlock.hazard) {
+                const float impact = stageFailureHazardBlockIndex_ == blockIndex
+                    ? stageFailureSequence_.GetImpactStrength() : 0.0f; // 接触したエリアだけ本体と同時に発光する強さ
+                stageBlock.object->SetMaterialColor(HazardAreaUtility::CalculateColor(stageBlock.baseColor,
+                    pastSelfTutorialState_.gimmicks.switchActive, pastSelfTutorialState_.progress.elapsedTime, impact));
             }
             stageBlock.object->Update(viewMatrix, projectionMatrix);
         }
@@ -1404,14 +1546,14 @@ void PlayScene::BuildPastSelfTutorialEditorObjects(std::vector<PastSelfTutorialE
     }; // 末尾へ追加された固定ブロックを編集一覧の最後へ配置する処理
 
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
-        appendGimmick(pastSelfTutorialToggleSwitch_.GetEditorObject(), "Toggle Switch", PastSelfTutorialEditorObjectType::ToggleSwitch);
-        appendGimmick(pastSelfTutorialToggleGate_.GetEditorObject(), "Toggle Gate", PastSelfTutorialEditorObjectType::ToggleGate);
-        appendGimmick(pastSelfTutorialToggleElevator_.GetEditorObject(), "Toggle Elevator", PastSelfTutorialEditorObjectType::ToggleElevator);
+        if (HasHazardAreasForCurrentRoute()) {
+            appendGimmick(pastSelfTutorialSwitch_.GetEditorObject(), "Pressure Switch", PastSelfTutorialEditorObjectType::BoxSwitch);
+        }
         appendLastStageBlock();
         return;
     }
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::TwoCloneCooperation) {
-        appendGimmick(pastSelfTutorialSwitch_.GetEditorObject(), "Clone Switch", PastSelfTutorialEditorObjectType::BoxSwitch);
+        appendGimmick(pastSelfTutorialSwitch_.GetEditorObject(), "Pressure Switch", PastSelfTutorialEditorObjectType::BoxSwitch);
         appendGimmick(pastSelfTutorialDoor_.GetEditorObject(), "Linked Door", PastSelfTutorialEditorObjectType::Door);
         appendGimmick(pastSelfTutorialTimedSwitch_.GetEditorObject(), "Timed Switch", PastSelfTutorialEditorObjectType::TimedSwitch);
         appendGimmick(pastSelfTutorialTimedDoor_.GetEditorObject(), "Timed Door", PastSelfTutorialEditorObjectType::TimedDoor);
@@ -1419,7 +1561,7 @@ void PlayScene::BuildPastSelfTutorialEditorObjects(std::vector<PastSelfTutorialE
         return;
     }
 
-    appendGimmick(pastSelfTutorialSwitch_.GetEditorObject(), "Clone Switch", PastSelfTutorialEditorObjectType::BoxSwitch);
+    appendGimmick(pastSelfTutorialSwitch_.GetEditorObject(), "Pressure Switch", PastSelfTutorialEditorObjectType::BoxSwitch);
     appendGimmick(pastSelfTutorialDoor_.GetEditorObject(), "Linked Door", PastSelfTutorialEditorObjectType::Door);
     appendGimmick(pastSelfTutorialTimedSwitch_.GetEditorObject(), "Timed Switch", PastSelfTutorialEditorObjectType::TimedSwitch);
     appendGimmick(pastSelfTutorialTimedDoor_.GetEditorObject(), "Timed Door", PastSelfTutorialEditorObjectType::TimedDoor);
@@ -1491,12 +1633,88 @@ void PlayScene::ApplyPastSelfTutorialEditorTransform(const PastSelfTutorialEdito
 }
 
 /// <summary>
+/// 現在区間の到達床を、JSON内のコース順から取得する。
+/// </summary>
+const PlayScene::PastSelfTutorialStageBlock* PlayScene::GetClonePlatformCourseGoal() const
+{
+    size_t sectionIndex = 0; // 配置順で数えるコース到達床の番号
+    for (const PastSelfTutorialStageBlock& stageBlock : pastSelfTutorialStageBlocks_) { // 保存順を維持して参照する到達床
+        if (!stageBlock.oneCloneGoalPlatform || (stageBlock.routeMask & kPastSelfTutorialOneCloneRouteMask) == 0) {
+            continue;
+        }
+        if (sectionIndex == clonePlatformCourseState_.GetSectionIndex()) {
+            return &stageBlock;
+        }
+        ++sectionIndex;
+    }
+    return nullptr;
+}
+
+/// <summary>
+/// コースの区間とプレイヤーの再挑戦位置を最初へ戻す。
+/// </summary>
+void PlayScene::ResetClonePlatformCourse()
+{
+    clonePlatformCourseState_.Reset();
+    PlayerState startState = player_.GetState(); // ルート切り替え後に使う初期状態
+    startState.transform.translate = kPastSelfTutorialStartTranslate;
+    startState.isMoving = false;
+    startState.isGrounded = true;
+    player_.SetInitialState(startState);
+}
+
+/// <summary>
+/// 到達床への接地で記録を消して次区間へ進み、最終区間だけクリアする。
+/// </summary>
+void PlayScene::UpdateClonePlatformCourse()
+{
+    if (pastSelfTutorialRoute_ != PastSelfTutorialRoute::OneCloneBasics || pastSelfRecorder_.IsRecording()) {
+        return;
+    }
+    const PastSelfTutorialStageBlock* goal = GetClonePlatformCourseGoal(); // 現在区間の到達床
+    if (!goal) {
+        return;
+    }
+    const StandablePlatform goalPlatform { goal->collider.center, goal->collider.halfSize, goal->collider.enabled }; // 上面への接地を確かめる範囲
+    if (!IsPlayerStateStandingOnPlatform(player_.GetState(), goalPlatform)) {
+        return;
+    }
+    if (!clonePlatformCourseState_.TryAdvance()) {
+        pastSelfTutorialState_.replay.oneCloneBasicsComplete = true;
+        RegisterPastSelfTutorialCheckCompleted("All three sections complete");
+        return;
+    }
+    const float elapsedTime = pastSelfTutorialState_.progress.elapsedTime; // 区間到達で巻き戻さない攻略時間
+    PlayerState startState = player_.GetState(); // 次区間の地上から始める初期状態
+    startState.transform.translate = clonePlatformCourseState_.GetStartPosition();
+    startState.isMoving = false;
+    startState.isGrounded = true;
+    player_.SetInitialState(startState);
+    ResetPastSelfTutorialState();
+    pastSelfTutorialState_.progress.elapsedTime = elapsedTime;
+    InitializeStageSelectionOverlay();
+    RegisterPastSelfTutorialCheckCompleted("Section complete; records cleared for the next section");
+}
+
+/// <summary>
 /// 選択中のチュートリアルルートに応じたカメラ注視対象を取得する。
 /// </summary>
 Math::Vector3 PlayScene::GetPastSelfTutorialRouteCameraTarget(const PlayerState& playerState) const
 {
+    if (!IsPastSelfTutorialCompletionEnabled()) {
+        for (size_t index = 0; index < pastSelfTutorialStageBlocks_.size(); ++index) { // クリアを使わないステージの注視対象
+            if (IsPastSelfTutorialStageBlockEnabled(index) && pastSelfTutorialStageBlocks_[index].hazard) {
+                return pastSelfTutorialStageBlocks_[index].collider.center;
+            }
+        }
+        return playerState.transform.translate;
+    }
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
-        return pastSelfTutorialToggleElevator_.GetEditorUpperTranslate();
+        const PastSelfTutorialStageBlock* goal = GetClonePlatformCourseGoal(); // 現在区間だけを収める注視対象
+        if (goal) {
+            return goal->collider.center;
+        }
+        return clonePlatformCourseState_.GetStartPosition();
     }
     const std::array<Object3d*, 4> targetObjects = { // 既存の攻略順で参照するギミック
         pastSelfTutorialDoor_.GetEditorObject(),
@@ -1525,8 +1743,15 @@ void PlayScene::DrawPastSelfTutorialStage()
             continue;
         }
         PastSelfTutorialStageBlock& stageBlock = pastSelfTutorialStageBlocks_[blockIndex]; // 描画対象のチュートリアルステージブロック
+        if (stageBlock.goalMarker && !IsPastSelfTutorialCompletionEnabled()) {
+            continue;
+        }
         if (stageBlock.object) {
-            stageBlock.object->Draw();
+            if (stageBlock.hazard) {
+                DrawObjectWithAlphaBlend(stageBlock.object.get());
+            } else {
+                stageBlock.object->Draw();
+            }
         }
     }
 }
@@ -1551,14 +1776,6 @@ void PlayScene::AppendPastSelfTutorialSolidColliders(std::vector<SolidCollider>*
     }
 
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
-        const SolidCollider toggleGateCollider = pastSelfTutorialToggleGate_.GetSolidCollider(); // 1体用ルートのトグル連動ゲート
-        if (toggleGateCollider.enabled) {
-            colliders->push_back(toggleGateCollider);
-        }
-        const SolidCollider toggleElevatorCollider = pastSelfTutorialToggleElevator_.GetSolidCollider(); // 1体用ルートの昇降足場
-        if (toggleElevatorCollider.enabled) {
-            colliders->push_back(toggleElevatorCollider);
-        }
         return;
     }
 
@@ -1602,7 +1819,7 @@ void PlayScene::AppendPastSelfTutorialSolidColliders(std::vector<SolidCollider>*
 /// </summary>
 void PlayScene::UpdatePastSelfTutorialGoal()
 {
-    if (pastSelfTutorialRoute_ != PastSelfTutorialRoute::FinalChallenge ||
+    if (!IsPastSelfTutorialCompletionEnabled() || pastSelfTutorialRoute_ != PastSelfTutorialRoute::FinalChallenge ||
         pastSelfTutorialState_.gimmicks.goalReached || pastSelfRecorder_.IsRecording()) {
         return;
     }
@@ -1646,7 +1863,16 @@ void PlayScene::DrawPastSelfTutorial()
     DrawPastSelfTutorialMechanics();
     DrawPastSelfTutorialCloneRecordMarkers();
     pastSelfCloneManager_.Draw();
-    player_.Draw();
+    if ((stageStartSequence_.IsArrivalVisible() || stageFailureSequence_.IsActive()) && stageStartBody_ && ctx_.object3dCommon) {
+        const BlendMode previousBlend = ctx_.object3dCommon->GetBlendMode(); // 出現表示の前の合成設定
+        ctx_.object3dCommon->SetBlendMode(BlendMode::Alpha);
+        ctx_.object3dCommon->SetCommonDrawSetting();
+        stageStartBody_->Draw();
+        ctx_.object3dCommon->SetBlendMode(previousBlend);
+        ctx_.object3dCommon->SetCommonDrawSetting();
+    } else {
+        player_.Draw();
+    }
 }
 
 /// <summary>
@@ -1658,8 +1884,6 @@ void PlayScene::DrawPastSelfTutorialImGui()
     const size_t storedCloneCount = pastSelfCloneManager_.GetCloneCount(); // 現在保存している分身数
     const bool cloneSlotsFull = storedCloneCount >= pastSelfTutorialStageRules_.maxStoredClones; // 保存枠が上限へ到達したか
     const bool selectedRouteComplete = IsPastSelfTutorialSelectedRouteComplete(); // 選択中ルートがクリア済みか
-    const bool allRoutesComplete = pastSelfTutorialState_.history.oneCloneRouteCleared && pastSelfTutorialState_.history.twoCloneRouteCleared &&
-        pastSelfTutorialState_.history.finalChallengeCleared; // 3つのチュートリアルルートをすべてクリア済みか
     ImGui::Text("Move: A/D or Left Stick X");
     ImGui::Text("Jump: Space or GamePad A");
     ImGui::TextWrapped("C: Record next + replay stored  V: Replay stored only  B: Stop clones");
@@ -1670,7 +1894,7 @@ void PlayScene::DrawPastSelfTutorialImGui()
         ImGui::Text("Door: %s", pastSelfTutorialState_.gimmicks.doorOpen ? "Open" : "Closed");
         ImGui::Text("Timed: Switch %s %.2f sec / Door %s", pastSelfTutorialState_.gimmicks.timedSwitchActive ? "ON" : "OFF", pastSelfTutorialTimedSwitch_.GetRemainingSeconds(), pastSelfTutorialState_.gimmicks.timedDoorOpen ? "Open" : "Closed");
         ImGui::Text("Toggle Lab: Switch %s  Clone %s / Gate %s / Lift %s Y %.2f Hold %.2f", pastSelfTutorialState_.gimmicks.toggleSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.toggleSwitchCloneOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.toggleGateOpen ? "Open" : "Closed", pastSelfTutorialToggleElevator_.IsWaitingAtEndpoint() ? "Holding" : (pastSelfTutorialState_.gimmicks.toggleElevatorActive ? "Moving" : "Idle"), pastSelfTutorialToggleElevator_.GetCurrentTranslate().y, pastSelfTutorialToggleElevator_.GetEndpointWaitRemainingSeconds());
-        ImGui::Text("Weight: %s  Player %s / Clone %s  Bridge %s", pastSelfTutorialState_.gimmicks.weightSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.weightPlayerOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.weightCloneOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.goalBridgeDeployed ? "Deployed" : "Retracted");
+        ImGui::Text("Weight: %.1f / %.1f  %s  Bridge %s", pastSelfTutorialWeightSwitch_.GetCurrentWeight(), pastSelfTutorialWeightSwitch_.GetRequiredWeight(), pastSelfTutorialState_.gimmicks.weightSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.goalBridgeDeployed ? "Deployed" : "Retracted");
         ImGui::Text("OneWay: %s", pastSelfTutorialState_.gimmicks.oneWayGateBlocking ? "Blocking" : "Passable");
         ImGui::Text("Route: %s  Takes: %u  Stored: %zu / %zu", GetPastSelfTutorialRouteLabel(),
             pastSelfTutorialState_.progress.recordTakeCount, storedCloneCount, pastSelfTutorialStageRules_.maxStoredClones);
@@ -1761,21 +1985,6 @@ void PlayScene::DrawPastSelfTutorialImGui()
     if (ImGui::Button("Reset Puzzle")) {
         ResetPastSelfTutorialState();
     }
-    if (selectedRouteComplete) {
-        ImGui::Separator();
-        if (ImGui::Button("Retry Route")) {
-            ResetPastSelfTutorialState();
-        }
-        if (pastSelfTutorialRoute_ != PastSelfTutorialRoute::FinalChallenge) {
-            ImGui::SameLine();
-            if (ImGui::Button("Next Route")) {
-                AdvancePastSelfTutorialRoute();
-            }
-        }
-        if (allRoutesComplete) {
-            ImGui::TextColored(ImVec4(0.15f, 1.0f, 0.45f, 1.0f), "All Routes Complete");
-        }
-    }
     if (ImGui::CollapsingHeader("Clone Identities", ImGuiTreeNodeFlags_DefaultOpen)) {
         pastSelfCloneManager_.DrawIdentityLegendImGui();
     }
@@ -1801,7 +2010,7 @@ void PlayScene::DrawPastSelfTutorialRouteSelector()
 #ifdef USE_IMGUI
     ImGui::Text("Route Mode");
     const bool oneCloneSelected = pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics; // 1体用ルートを選択中か
-    if (ImGui::RadioButton("1 Clone", oneCloneSelected)) {
+    if (ImGui::RadioButton("Platform Trial", oneCloneSelected)) {
         SelectPastSelfTutorialRoute(PastSelfTutorialRoute::OneCloneBasics);
     }
     ImGui::SameLine();
@@ -1822,11 +2031,22 @@ void PlayScene::DrawPastSelfTutorialRouteSelector()
 /// </summary>
 void PlayScene::SelectPastSelfTutorialRoute(PastSelfTutorialRoute route)
 {
+    if (stageSelection_) {
+        const uint32_t routeMask = 1u << static_cast<uint32_t>(route); // 選んだ既存ルートに対応する配置フラグ
+        for (size_t index = 0; index < GameApp::kSelectableStages.size(); ++index) { // 配置とルートが一致する選択番号
+            const auto& stage = GameApp::kSelectableStages[index]; // 危険エリアと総合課題を区別する選択情報
+            if (pastSelfTutorialStageFileName_ == stage.fileName && routeMask == stage.routeMask) {
+                stageSelection_->selectedStageIndex = index;
+                break;
+            }
+        }
+    }
     if (pastSelfTutorialRoute_ == route) {
         return;
     }
 
     pastSelfTutorialRoute_ = route;
+    ResetClonePlatformCourse();
     switch (pastSelfTutorialRoute_) {
     case PastSelfTutorialRoute::OneCloneBasics:
         pastSelfTutorialStageRules_.maxStoredClones = 1;
@@ -1843,24 +2063,73 @@ void PlayScene::SelectPastSelfTutorialRoute(PastSelfTutorialRoute route)
 }
 
 /// <summary>
-/// クリア済みのルートから次のチュートリアルルートへ進む。
+/// 提出用の到達判定を検出し、クリア履歴を記録せずタイトルへ戻す。
 /// </summary>
-void PlayScene::AdvancePastSelfTutorialRoute()
+bool PlayScene::HandleStageCompletion()
 {
-    if (!IsPastSelfTutorialSelectedRouteComplete()) {
-        return;
+    if (!IsPastSelfTutorialCompletionEnabled() || !ctx_.requestSceneChange || !IsPastSelfTutorialSelectedRouteComplete()) {
+        return false;
     }
+    ctx_.requestSceneChange("Title");
+    return true;
+}
 
-    switch (pastSelfTutorialRoute_) {
-    case PastSelfTutorialRoute::OneCloneBasics:
-        SelectPastSelfTutorialRoute(PastSelfTutorialRoute::TwoCloneCooperation);
-        break;
-    case PastSelfTutorialRoute::TwoCloneCooperation:
-        SelectPastSelfTutorialRoute(PastSelfTutorialRoute::FinalChallenge);
-        break;
-    case PastSelfTutorialRoute::FinalChallenge:
-        break;
+/// <summary>
+/// 現在の配置ファイルとルートでゴール・クリアを有効にするか確認する。
+/// </summary>
+bool PlayScene::IsPastSelfTutorialCompletionEnabled() const
+{
+    const uint32_t routeMask = 1u << static_cast<uint32_t>(pastSelfTutorialRoute_); // 現在の攻略ルートの配置フラグ
+    for (const auto& stage : GameApp::kSelectableStages) { // 配置ファイルと使用ルートを共に照合する選択情報
+        if (pastSelfTutorialStageFileName_ == stage.fileName && routeMask == stage.routeMask) {
+            return stage.allowCompletion;
+        }
     }
+    return true;
+}
+
+/// <summary>
+/// 選択中ルートに危険エリアが配置されているか確認する。
+/// </summary>
+bool PlayScene::HasHazardAreasForCurrentRoute() const
+{
+    for (size_t index = 0; index < pastSelfTutorialStageBlocks_.size(); ++index) { // ルート内の危険属性を確認する番号
+        if (IsPastSelfTutorialStageBlockEnabled(index) && pastSelfTutorialStageBlocks_[index].hazard) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// <summary>
+/// 配置順によらず、本体が最初に接触する危険エリアの番号と移動割合を取得する。
+/// </summary>
+bool PlayScene::TryGetHazardContact(const PlayerState& previousState, float& contactFraction, size_t& blockIndex) const
+{
+    bool contacted = false; // 一つ以上の危険エリアへ接触したか
+    float earliestFraction = 1.0f; // 全エリアのうち最も早い接触割合
+    size_t earliestBlockIndex = 0; // 最初に接触した危険エリアの番号
+    for (size_t index = 0; index < pastSelfTutorialStageBlocks_.size(); ++index) { // 接触対象のブロック番号
+        const PastSelfTutorialStageBlock& block = pastSelfTutorialStageBlocks_[index]; // 表示と判定が共通の危険エリア
+        if (!block.hazard || !IsPastSelfTutorialStageBlockEnabled(index)) {
+            continue;
+        }
+        const SolidCollider area { block.collider.center, block.collider.halfSize, true }; // 地形衝突とは独立した危険範囲
+        float areaContactFraction = 1.0f; // この危険エリアへの接触割合
+        if (HazardAreaUtility::TryGetContactFraction(previousState, player_.GetState(), area,
+                pastSelfTutorialState_.gimmicks.switchActive, areaContactFraction)) {
+            if (!contacted || areaContactFraction < earliestFraction) {
+                earliestFraction = areaContactFraction;
+                earliestBlockIndex = index;
+            }
+            contacted = true;
+        }
+    }
+    if (contacted) {
+        contactFraction = earliestFraction;
+        blockIndex = earliestBlockIndex;
+    }
+    return contacted;
 }
 
 /// <summary>
@@ -1870,7 +2139,7 @@ const char* PlayScene::GetPastSelfTutorialRouteLabel() const
 {
     switch (pastSelfTutorialRoute_) {
     case PastSelfTutorialRoute::OneCloneBasics:
-        return "One-clone tutorial";
+        return "Clone platform course";
     case PastSelfTutorialRoute::TwoCloneCooperation:
         return "Two-clone tutorial";
     case PastSelfTutorialRoute::FinalChallenge:
@@ -1884,6 +2153,9 @@ const char* PlayScene::GetPastSelfTutorialRouteLabel() const
 /// </summary>
 bool PlayScene::IsPastSelfTutorialSelectedRouteComplete() const
 {
+    if (!IsPastSelfTutorialCompletionEnabled()) {
+        return false;
+    }
     switch (pastSelfTutorialRoute_) {
     case PastSelfTutorialRoute::OneCloneBasics:
         return pastSelfTutorialState_.replay.oneCloneBasicsComplete;
@@ -1929,27 +2201,24 @@ const char* PlayScene::GetPastSelfTutorialNextActionText() const
     const bool hasStoredClones = storedCloneCount > 0; // 再生に使用できる分身があるか
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
         if (pastSelfTutorialState_.replay.oneCloneBasicsComplete) {
-            return "One-clone tutorial route complete";
+            return "Clone platform goal reached";
         }
         if (pastSelfRecorder_.IsRecording()) {
-            return "Record the clone moving onto the orange toggle";
+            return "Recording your movement; C saves the record";
         }
         if (!hasStoredClones) {
-            return "Press C and record one clone on the orange toggle";
+            return "Reach this section's orange platform; C records";
         }
         if (!pastSelfTutorialState_.progress.prepareUsed) {
-            return "Press T to prepare the one-clone replay";
+            return "T prepares replay from this section's start";
         }
         if (visibleCloneCount == 0) {
             return "Press V to replay the stored clone";
         }
-        if (!pastSelfTutorialState_.replay.oneCloneToggleActivated) {
-            return "Wait for the clone to activate the orange toggle";
+        if (!pastSelfTutorialState_.progress.clonePlatformUsed) {
+            return "Jump onto your clone before its recorded jump";
         }
-        if (!pastSelfTutorialState_.replay.oneCloneElevatorRidden) {
-            return "Move left and board the orange moving lift";
-        }
-        return "Ride the orange moving lift to the upper endpoint";
+        return "Reach the orange platform; T / V retries this section";
     }
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::TwoCloneCooperation) {
         if (pastSelfTutorialState_.replay.twoCloneCooperationComplete) {
@@ -2008,10 +2277,10 @@ const char* PlayScene::GetPastSelfTutorialNextActionText() const
         return "Press V to replay stored clones only (no new recording)";
     }
     if (pastSelfTutorialState_.gimmicks.playerOnSwitch && !pastSelfTutorialState_.gimmicks.cloneOnSwitch) {
-        return "Move the clone onto the green switch";
+        return "Leave a clone on the green switch while you pass the door";
     }
     if (!pastSelfTutorialState_.progress.doorOpenedByClone) {
-        return "Wait for the clone to open the green door";
+        return "Keep a clone on the green switch to hold the door open";
     }
     if (!pastSelfTutorialState_.progress.clonePlatformUsed) {
         return "Use a clone as the blue-step platform";
@@ -2023,7 +2292,7 @@ const char* PlayScene::GetPastSelfTutorialNextActionText() const
         return "Pass through the opened blue door";
     }
     if (!pastSelfTutorialState_.progress.weightSwitchActivated) {
-        return "Activate the yellow switch with player and clone";
+        return "Reach the yellow switch's required weight using player or clones";
     }
     if (!pastSelfTutorialState_.progress.oneWayGateUsed) {
         return "Pass the purple gate and test the return path";
@@ -2076,8 +2345,8 @@ void PlayScene::DrawPastSelfTutorialFixedStatusHud()
         pastSelfTutorialState_.history.finalChallengeCleared ? "[x]" : "[ ]");
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
         ImGui::TextColored(pastSelfTutorialState_.replay.oneCloneBasicsComplete ? checkedColor : uncheckedColor,
-            "One-clone tutorial: %d / 4%s", status.oneCloneTutorialCheckCount,
-            pastSelfTutorialState_.replay.oneCloneBasicsComplete ? " Complete" : "");
+            "Section %zu / %zu: %s", clonePlatformCourseState_.GetSectionIndex() + 1, ClonePlatformCourseState::kSectionCount,
+            pastSelfTutorialState_.replay.oneCloneBasicsComplete ? "Complete" : "Reach the orange platform");
         if (selectedRouteComplete) {
             ImGui::TextColored(checkedColor, "CLEAR %.2f sec", pastSelfTutorialState_.replay.clearTime);
         } else {
@@ -2158,7 +2427,7 @@ void PlayScene::DrawPastSelfTutorialStatusHud()
     const char* routeLabel = GetPastSelfTutorialRouteLabel(); // 現在のチュートリアルルート種別
     const char* routeNeedText = "Stored >= 2 and Green + Blue active together"; // 選択ルートの主要完了条件
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
-        routeNeedText = "Takes 1 / Stored 1 / Orange toggle + moving lift";
+        routeNeedText = "Complete platform, movement and rejoin sections in order";
     } else if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::TwoCloneCooperation) {
         routeNeedText = "Takes 2 / Stored 2 / Green + Blue / pass blue door";
     }
@@ -2209,12 +2478,12 @@ void PlayScene::DrawPastSelfTutorialStatusHud()
     ImGui::Text("Door  : %s  Timed %s  Goal %s%s", pastSelfTutorialState_.gimmicks.doorOpen ? "Open" : "Closed", pastSelfTutorialState_.gimmicks.timedDoorOpen ? "Open" : "Closed", pastSelfTutorialState_.gimmicks.goalReached ? "Reached" : "Not Reached", pastSelfTutorialState_.gimmicks.goalReached ? " / CLEAR" : "");
     ImGui::Text("Timed: %s  Clone %s  %.2f sec", pastSelfTutorialState_.gimmicks.timedSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.timedSwitchCloneOn ? "ON" : "OFF", pastSelfTutorialTimedSwitch_.GetRemainingSeconds());
     ImGui::Text("Toggle: %s  Clone %s  Gate %s  Lift %s Y %.2f Hold %.2f", pastSelfTutorialState_.gimmicks.toggleSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.toggleSwitchCloneOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.toggleGateOpen ? "Open" : "Closed", pastSelfTutorialToggleElevator_.IsWaitingAtEndpoint() ? "Holding" : (pastSelfTutorialState_.gimmicks.toggleElevatorActive ? "Moving" : "Idle"), pastSelfTutorialToggleElevator_.GetCurrentTranslate().y, pastSelfTutorialToggleElevator_.GetEndpointWaitRemainingSeconds());
-    ImGui::Text("Weight: %s  Player %s  Clone %s  Bridge %s", pastSelfTutorialState_.gimmicks.weightSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.weightPlayerOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.weightCloneOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.goalBridgeDeployed ? "Deployed" : "Retracted");
+    ImGui::Text("Weight: %.1f / %.1f  %s  Player %s  Clone %s  Bridge %s", pastSelfTutorialWeightSwitch_.GetCurrentWeight(), pastSelfTutorialWeightSwitch_.GetRequiredWeight(), pastSelfTutorialState_.gimmicks.weightSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.weightPlayerOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.weightCloneOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.goalBridgeDeployed ? "Deployed" : "Retracted");
     ImGui::Text("OneWay: %s", pastSelfTutorialState_.gimmicks.oneWayGateBlocking ? "Blocking" : "Passable");
     ImGui::Text("Next  : %s", nextActionText);
     ImGui::Text("Checks: %d / 7%s", status.completedCheckCount, status.allChecksComplete ? " All complete" : "");
     ImGui::Text("Video : %d / 5%s", status.completedFlowCount, status.videoFlowComplete ? " Flow complete" : "");
-    ImGui::TextColored(normalDoorColor, "Green : Clone switch door");
+    ImGui::TextColored(normalDoorColor, "Green : Hold switch to keep door open");
     ImGui::TextColored(timedDoorColor, "Blue  : Green + timed switch door");
     ImGui::TextColored(toggleSwitchColor, "Orange: Optional toggle gate + moving lift");
     ImGui::TextColored(weightSwitchColor, "Yellow: Weight switch + goal bridge");
@@ -2228,13 +2497,12 @@ void PlayScene::DrawPastSelfTutorialStatusHud()
     ImGui::TextColored(pastSelfTutorialState_.progress.replayStarted ? checkedColor : uncheckedColor, "[%c] Recorded clone replay started", pastSelfTutorialState_.progress.replayStarted ? 'x' : ' ');
     ImGui::Separator();
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
-        ImGui::Text("One-clone tutorial");
-        ImGui::TextColored(status.oneCloneRecordingStored ? checkedColor : uncheckedColor, "[%c] One recording stored", status.oneCloneRecordingStored ? 'x' : ' ');
-        ImGui::TextColored(pastSelfTutorialState_.replay.oneCloneToggleActivated ? checkedColor : uncheckedColor, "[%c] Clone activated orange toggle", pastSelfTutorialState_.replay.oneCloneToggleActivated ? 'x' : ' ');
-        ImGui::TextColored(pastSelfTutorialState_.replay.oneCloneElevatorRidden ? checkedColor : uncheckedColor, "[%c] Player rode orange moving lift", pastSelfTutorialState_.replay.oneCloneElevatorRidden ? 'x' : ' ');
-        ImGui::TextColored(pastSelfTutorialState_.replay.oneCloneBasicsComplete ? checkedColor : uncheckedColor, "[%c] Upper endpoint reached", pastSelfTutorialState_.replay.oneCloneBasicsComplete ? 'x' : ' ');
+        ImGui::Text("Section %zu / %zu", clonePlatformCourseState_.GetSectionIndex() + 1, ClonePlatformCourseState::kSectionCount);
+        ImGui::Text("Recordings stored: %zu / 1", storedCloneCount);
+        ImGui::TextColored(pastSelfTutorialState_.progress.clonePlatformUsed ? checkedColor : uncheckedColor, "[%c] Player stood on a clone", pastSelfTutorialState_.progress.clonePlatformUsed ? 'x' : ' ');
+        ImGui::TextColored(pastSelfTutorialState_.replay.oneCloneBasicsComplete ? checkedColor : uncheckedColor, "[%c] High ledge reached", pastSelfTutorialState_.replay.oneCloneBasicsComplete ? 'x' : ' ');
         ImGui::TextColored(pastSelfTutorialState_.replay.oneCloneBasicsComplete ? checkedColor : uncheckedColor, "%s",
-            pastSelfTutorialState_.replay.oneCloneBasicsComplete ? "One-clone tutorial route complete" : "One-clone tutorial route incomplete");
+            pastSelfTutorialState_.replay.oneCloneBasicsComplete ? "Clone platform trial complete" : "Clone platform trial incomplete");
         ImGui::Separator();
     }
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::TwoCloneCooperation) {
@@ -2270,8 +2538,8 @@ void PlayScene::DrawPastSelfTutorialStatusHud()
             pastSelfTutorialState_.gimmicks.toggleSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.toggleSwitchCloneOn ? "ON" : "OFF",
             pastSelfTutorialState_.gimmicks.toggleGateOpen ? "Open" : "Closed", pastSelfTutorialState_.gimmicks.toggleElevatorActive ? "Moving" : "Idle",
             pastSelfTutorialToggleElevator_.GetCurrentTranslate().y);
-        ImGui::BulletText("Player %s + Clone %s -> Weight %s -> Bridge %s",
-            pastSelfTutorialState_.gimmicks.weightPlayerOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.weightCloneOn ? "ON" : "OFF",
+        ImGui::BulletText("Weight %.1f / %.1f -> %s -> Bridge %s",
+            pastSelfTutorialWeightSwitch_.GetCurrentWeight(), pastSelfTutorialWeightSwitch_.GetRequiredWeight(),
             pastSelfTutorialState_.gimmicks.weightSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.goalBridgeDeployed ? "Deployed" : "Retracted");
         ImGui::BulletText("One-way %s / Goal %s",
             pastSelfTutorialState_.gimmicks.oneWayGateBlocking ? "Blocking" : "Passable",
@@ -2282,17 +2550,17 @@ void PlayScene::DrawPastSelfTutorialStatusHud()
     ImGui::Separator();
     ImGui::Text("Gimmick Debug");
     ImGui::Text("Units : BoxSwitch / LinkedDoor / TimedSwitch / ToggleSwitch / MovingPlatform / WeightSwitch / LinkedBridge / OneWayGate / Goal");
-    ImGui::TextColored(normalDoorColor, "Green : BoxSwitch Clone %s -> LinkedDoor %s", pastSelfTutorialState_.gimmicks.cloneOnSwitch ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.doorOpen ? "Open" : "Closed");
+    ImGui::TextColored(normalDoorColor, "Green : BoxSwitch %s -> LinkedDoor %s", pastSelfTutorialState_.gimmicks.switchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.doorOpen ? "Open" : "Closed");
     ImGui::TextColored(timedDoorColor, "Blue  : Green %s + TimedSwitch %s %.2f sec -> TimedDoor %s", pastSelfTutorialState_.gimmicks.switchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.timedSwitchActive ? "ON" : "OFF", pastSelfTutorialTimedSwitch_.GetRemainingSeconds(), pastSelfTutorialState_.gimmicks.timedDoorOpen ? "Open" : "Closed");
     ImGui::TextColored(toggleSwitchColor, "Orange: ToggleSwitch %s Clone %s -> Gate %s / Lift %s Y %.2f Hold %.2f", pastSelfTutorialState_.gimmicks.toggleSwitchActive ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.toggleSwitchCloneOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.toggleGateOpen ? "Open" : "Closed", pastSelfTutorialToggleElevator_.IsWaitingAtEndpoint() ? "Holding" : (pastSelfTutorialState_.gimmicks.toggleElevatorActive ? "Moving" : "Idle"), pastSelfTutorialToggleElevator_.GetCurrentTranslate().y, pastSelfTutorialToggleElevator_.GetEndpointWaitRemainingSeconds());
-    ImGui::TextColored(weightSwitchColor, "Yellow: WeightSwitch Player %s + Clone %s -> Bridge %s", pastSelfTutorialState_.gimmicks.weightPlayerOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.weightCloneOn ? "ON" : "OFF", pastSelfTutorialState_.gimmicks.goalBridgeDeployed ? "Deployed" : "Retracted");
+    ImGui::TextColored(weightSwitchColor, "Yellow: WeightSwitch %.1f / %.1f -> Bridge %s", pastSelfTutorialWeightSwitch_.GetCurrentWeight(), pastSelfTutorialWeightSwitch_.GetRequiredWeight(), pastSelfTutorialState_.gimmicks.goalBridgeDeployed ? "Deployed" : "Retracted");
     ImGui::TextColored(oneWayGateColor, "Purple: OneWayGate %s", pastSelfTutorialState_.gimmicks.oneWayGateBlocking ? "Return blocked" : "Passable");
     ImGui::Separator();
     ImGui::TextColored(pastSelfTutorialState_.progress.doorBlockedBeforeClone ? checkedColor : uncheckedColor, "[%c] Closed door blocked player", pastSelfTutorialState_.progress.doorBlockedBeforeClone ? 'x' : ' ');
     ImGui::TextColored(pastSelfTutorialState_.progress.doorOpenedByClone ? checkedColor : uncheckedColor, "[%c] Clone opened door switch", pastSelfTutorialState_.progress.doorOpenedByClone ? 'x' : ' ');
     ImGui::TextColored(pastSelfTutorialState_.progress.clonePlatformUsed ? checkedColor : uncheckedColor, "[%c] Player used clone as platform", pastSelfTutorialState_.progress.clonePlatformUsed ? 'x' : ' ');
     ImGui::TextColored(pastSelfTutorialState_.progress.timedDoorOpened ? checkedColor : uncheckedColor, "[%c] Green and timed switches opened blue door", pastSelfTutorialState_.progress.timedDoorOpened ? 'x' : ' ');
-    ImGui::TextColored(pastSelfTutorialState_.progress.weightSwitchActivated ? checkedColor : uncheckedColor, "[%c] Player and clone activated weight switch", pastSelfTutorialState_.progress.weightSwitchActivated ? 'x' : ' ');
+    ImGui::TextColored(pastSelfTutorialState_.progress.weightSwitchActivated ? checkedColor : uncheckedColor, "[%c] Required weight activated yellow switch", pastSelfTutorialState_.progress.weightSwitchActivated ? 'x' : ' ');
     ImGui::TextColored(pastSelfTutorialState_.progress.oneWayGateUsed ? checkedColor : uncheckedColor, "[%c] One-way gate blocked return path", pastSelfTutorialState_.progress.oneWayGateUsed ? 'x' : ' ');
     ImGui::TextColored(pastSelfTutorialState_.gimmicks.goalReached ? checkedColor : uncheckedColor, "[%c] Goal reached", pastSelfTutorialState_.gimmicks.goalReached ? 'x' : ' ');
     ImGui::Separator();

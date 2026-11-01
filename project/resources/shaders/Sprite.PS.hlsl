@@ -17,10 +17,13 @@ struct PixelShaderOutput
 PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
-    float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), _gMaterial.uvTransform);
-    float4 textureColorLinear = gtexture.Sample(gSampler, transformedUV.xy);
-    float4 textureColorPoint = gtexture.Sample(gSamplerPointClamp, transformedUV.xy);
-    float4 textureColor = (_gMaterial.useAlphaCutoutSampler != 0) ? textureColorPoint : textureColorLinear;
+    float4 textureColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    if (_gMaterial.useTexture != 0) {
+        float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), _gMaterial.uvTransform);
+        float4 textureColorLinear = gtexture.Sample(gSampler, transformedUV.xy);
+        float4 textureColorPoint = gtexture.Sample(gSamplerPointClamp, transformedUV.xy);
+        textureColor = (_gMaterial.useAlphaCutoutSampler != 0) ? textureColorPoint : textureColorLinear;
+    }
 
     float3 finalRGB = _gMaterial.color.rgb * textureColor.rgb;
     float finalA = _gMaterial.color.a * textureColor.a;

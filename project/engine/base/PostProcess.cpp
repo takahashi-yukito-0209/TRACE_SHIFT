@@ -319,6 +319,22 @@ void PostProcess::SetRadialBlurSampleCount(uint32_t sampleCount)
 }
 
 /// <summary>
+/// Radial Blurの画面倍率を設定する。
+/// </summary>
+void PostProcess::SetRadialBlurScale(float scale)
+{
+    settings_.SetRadialBlurScale(scale);
+}
+
+/// <summary>
+/// Radial Blurの白黒混合率を設定する。
+/// </summary>
+void PostProcess::SetRadialBlurGrayscaleAmount(float amount)
+{
+    settings_.SetRadialBlurGrayscaleAmount(amount);
+}
+
+/// <summary>
 /// 画面歪みの中心UV座標を設定する
 /// </summary>
 void PostProcess::SetDistortionCenter(const Math::Vector2& center)

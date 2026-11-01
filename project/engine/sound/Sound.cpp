@@ -5,6 +5,8 @@
 #include "engine/utility/StringUtility.h"
 #include <Windows.h>
 #include <atomic>
+#include <algorithm>
+#include <cmath>
 #include <cassert>
 #include <comdef.h>
 #include <filesystem>
@@ -54,6 +56,27 @@ bool SoundSystem::Initialize()
         return false;
     }
 
+    if (!SetMasterVolume(masterVolume_)) {
+        Finalize();
+        return false;
+    }
+
+    return true;
+}
+
+/// <summary>
+/// 全体音量を制限し、音声出力へ反映してから設定値を保持する。
+/// </summary>
+bool SoundSystem::SetMasterVolume(float volume)
+{
+    if (!std::isfinite(volume)) {
+        return false;
+    }
+    const float clampedVolume = (std::clamp)(volume, 0.0f, 1.0f); // ミュートから最大音量までに制限した設定値
+    if (masteringVoice_ && !MYENGINE_CHECK_HRESULT(masteringVoice_->SetVolume(clampedVolume), "SoundSystem::SetMasterVolume failed.")) {
+        return false;
+    }
+    masterVolume_ = clampedVolume;
     return true;
 }
 

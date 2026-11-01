@@ -23,6 +23,7 @@ class Object3d;
 class Sprite;
 class PostProcess;
 class DebugRenderer;
+class SoundSystem;
 struct SceneContext {
     Object3dCommon* object3dCommon = nullptr; // 3D オブジェクト共通管理
     SpriteCommon* spriteCommon = nullptr; // スプライト共通管理
@@ -33,7 +34,11 @@ struct SceneContext {
     DirectXCommon* directXCommon = nullptr; // DirectX 共通管理
     DebugRenderer* debugRenderer = nullptr; // デバッグ描画管理
     class ImGuiManager* imguiManager = nullptr; // ImGui 管理
+    SoundSystem* soundSystem = nullptr; // シーン間で共通の音量を設定する音声管理
     std::function<void(const std::string&)> requestSceneChange; // シーン切り替え要求の通知先
+    std::function<bool()> isSceneTransitionActive; // 遷移中の操作を抑止するための状態参照
+    std::function<void(int)> beginSceneTransition; // 最終画面の収集開始と出力先RTの通知（-1はバックバッファ）
+    std::function<void()> drawSceneTransition; // シーンの最終描画先へ共通フェードを重ねる処理
 };
 
 /// <summary>

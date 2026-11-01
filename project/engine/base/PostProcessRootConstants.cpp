@@ -44,6 +44,11 @@ RootConstantData BuildTexture(PostEffectType effectType, const PostProcessSettin
     WriteFloatRootConstant(filterSettings.data(), 17, settings.randomStrength);
     WriteFloatRootConstant(filterSettings.data(), 18, settings.randomScale);
 
+    if (effectType == PostEffectType::RadialBlur) {
+        WriteFloatRootConstant(filterSettings.data(), 8, settings.radialBlurScale);
+        WriteFloatRootConstant(filterSettings.data(), 9, settings.radialBlurGrayscaleAmount);
+    }
+
     if (effectType == PostEffectType::Distortion) {
         std::memcpy(&filterSettings[4], &settings.distortionCenter, sizeof(Math::Vector2));
         WriteFloatRootConstant(filterSettings.data(), 6, settings.distortionStrength);

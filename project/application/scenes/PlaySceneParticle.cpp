@@ -27,11 +27,7 @@ constexpr float kHitStopFinishedThreshold = 0.0f; // ヒットストップが終
 constexpr const char* kCircleTextureName = "circle.png"; // 円形パーティクルに使用するテクスチャ名
 constexpr const char* kCircleFlashTextureName = "circle2.png"; // 発光系スプライトに使用するテクスチャ名
 constexpr const char* kGradationLineTextureName = "gradationLine.png"; // リングと円柱に使用するテクスチャ名
-constexpr const char* kUvCheckerTextureName = "uvChecker.png"; // 確認用UVテクスチャ名
-constexpr const char* kMonsterBallTextureName = "monsterBall.png"; // 確認用ボールテクスチャ名
 constexpr const char* kCircleParticleGroupName = "Circle"; // 円形パーティクルグループ名
-constexpr const char* kCheckerParticleGroupName = "Checker"; // チェッカーパーティクルグループ名
-constexpr const char* kBallParticleGroupName = "Ball"; // ボールパーティクルグループ名
 constexpr const char* kHitParticleGroupName = "Hit"; // ヒット演出パーティクルグループ名
 constexpr const char* kRingParticleGroupName = "Ring"; // リング演出パーティクルグループ名
 constexpr const char* kCylinderParticleGroupName = "Cylinder"; // 円柱演出パーティクルグループ名
@@ -138,7 +134,7 @@ void PlayScene::InitializeParticleObjects()
 }
 
 /// <summary>
-/// ParticleManagerに使用するグループと描画オブジェクトを登録する。
+/// ParticleManagerにエフェクト編集で使うグループと描画オブジェクトを登録する。
 /// </summary>
 void PlayScene::InitializeParticleManager()
 {
@@ -148,7 +144,7 @@ void PlayScene::InitializeParticleManager()
     }
 
     particleManager->ClearSceneParticles();
-    if (kUsePostEffectPreviewScene) {
+    if (!kEnableLegacyPreview) {
         // 確認用GPU粒子は発生させず、エフェクト起動時のプリセット読み込みを待つ。
         if (PM_GpuEmitterSphere* emitterState = particleManager->GetMutableGpuEmitterState()) { // 発生数を初期化するGPU設定
             emitterState->count = 0;
@@ -156,8 +152,6 @@ void PlayScene::InitializeParticleManager()
     }
     particleManager->SetParticlePlane(particlePlane_.get());
     particleManager->CreateParticleGroup(kCircleParticleGroupName, kCircleTextureName);
-    particleManager->CreateParticleGroup(kCheckerParticleGroupName, kUvCheckerTextureName);
-    particleManager->CreateParticleGroup(kBallParticleGroupName, kMonsterBallTextureName);
     particleManager->CreateParticleGroup(kHitParticleGroupName, kCircleFlashTextureName);
     particleManager->CreateParticleGroup(kRingParticleGroupName, kGradationLineTextureName);
     particleManager->CreateParticleGroup(kCylinderParticleGroupName, kGradationLineTextureName);
@@ -260,7 +254,7 @@ void PlayScene::UpdateParticleSystems(float deltaTime)
 {
     const bool hasActiveHitStop = HasActiveHitStop(temporalRiftEffect_.GetHitStopRemainingTime()); // ヒットストップ中か
     const float particleDeltaTime = (hasActiveHitStop || IsTimeStopped()) ? kStoppedDeltaTime : deltaTime; // ヒットストップと時間停止を反映したパーティクル時間
-    if (!kUsePostEffectPreviewScene) {
+    if (kEnableLegacyPreview) {
         pmEmitter_.Update(particleDeltaTime);
         ringEmitter_.Update(particleDeltaTime);
         cylinderEmitter_.Update(particleDeltaTime);

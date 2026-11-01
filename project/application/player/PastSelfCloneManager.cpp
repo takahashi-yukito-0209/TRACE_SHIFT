@@ -142,7 +142,7 @@ void PastSelfCloneManager::PauseAll()
 /// </summary>
 void PastSelfCloneManager::Update(float deltaTime, const std::vector<StandablePlatform>& standablePlatforms)
 {
-    for (const std::unique_ptr<PastSelfClone>& clone : clones_) {
+    for (const auto& clone : clones_) { // 保存順に更新する分身
         if (clone) {
             clone->Update(deltaTime, standablePlatforms);
         }
@@ -260,21 +260,19 @@ std::vector<PlayerState> PastSelfCloneManager::GetVisibleStates() const
 }
 
 /// <summary>
-/// プレイヤーが乗れる可視分身の足場一覧を取得する。
+/// 保存順の分身足場一覧を取得する。非表示の足場は無効状態で保持する。
 /// </summary>
 std::vector<StandablePlatform> PastSelfCloneManager::GetStandablePlatforms() const
 {
     std::vector<StandablePlatform> platforms; // プレイヤー用の分身足場一覧
-    platforms.reserve(GetVisibleCount());
+    platforms.reserve(clones_.size());
     for (const std::unique_ptr<PastSelfClone>& clone : clones_) {
         if (!clone) {
             continue;
         }
 
         const StandablePlatform platform = clone->GetStandablePlatform(); // 現在の分身から作成した足場
-        if (platform.enabled) {
-            platforms.push_back(platform);
-        }
+        platforms.push_back(platform);
     }
     return platforms;
 }

@@ -8,12 +8,11 @@
 /// ギミックの現在状態。通常リセットと再生準備で初期化する。
 /// </summary>
 struct PastSelfTutorialGimmickState {
-    bool switchActive = false; // 分身専用スイッチが押されているか
+    bool switchActive = false; // プレイヤーまたは分身が通常スイッチを押しているか
     bool doorOpen = false; // 通常扉が開いているか
     bool goalReached = false; // ゴールに到達したか
-    bool doorUnlockedByClone = false; // 分身入力で通常扉を開放済みか
-    bool playerOnSwitch = false; // プレイヤーが分身専用スイッチ上にいるか
-    bool cloneOnSwitch = false; // 分身が分身専用スイッチ上にいるか
+    bool playerOnSwitch = false; // プレイヤーが通常スイッチ上にいるか
+    bool cloneOnSwitch = false; // 分身が通常スイッチ上にいるか
     bool timedSwitchActive = false; // 時間差スイッチが起動中か
     bool timedSwitchCloneOn = false; // 分身が時間差スイッチ上にいるか
     bool timedDoorOpen = false; // 時間差扉が開いているか
@@ -32,8 +31,6 @@ struct PastSelfTutorialGimmickState {
 /// 再生ごとの進捗。再生準備で実績とは別に初期化する。
 /// </summary>
 struct PastSelfTutorialReplayState {
-    bool oneCloneToggleActivated = false; // 1体ルートで分身がトグルスイッチを起動したか
-    bool oneCloneElevatorRidden = false; // 1体ルートで昇降足場に乗ったか
     bool oneCloneBasicsComplete = false; // 1体ルートを完了したか
     bool twoCloneReplayPrepared = false; // 記録2回・分身2体で再生準備したか
     bool twoCloneSwitchesActivated = false; // 2体ルートで別々の分身がスイッチを起動したか
@@ -83,14 +80,12 @@ struct PastSelfTutorialRouteHistory {
 struct PastSelfTutorialStatus {
     int completedCheckCount = 0; // 最終課題の達成済み検証項目数
     int completedFlowCount = 0; // 達成済みの動画操作項目数
-    int oneCloneTutorialCheckCount = 0; // 1体ルートの達成済み項目数
     int twoCloneTutorialCheckCount = 0; // 2体ルートの達成済み項目数
     bool allChecksComplete = false; // ゴールを含む7項目をすべて達成したか
     bool videoFlowComplete = false; // 動画操作の5項目をすべて達成したか
     bool enoughStoredClones = false; // 最終課題の検証に必要な分身数があるか
     bool multiCloneRouteComplete = false; // 最終課題の検証条件をすべて満たしたか
     bool allRoutesComplete = false; // 3ルートを通算でクリア済みか
-    bool oneCloneRecordingStored = false; // 記録1回かつ分身1体で記録を停止済みか
     bool twoCloneRecordingsStored = false; // 記録2回かつ分身2体で記録を停止済みか
 };
 
@@ -123,13 +118,8 @@ struct PastSelfTutorialState {
             status.enoughStoredClones && progress.dualCloneSwitchesActivated;
         status.allRoutesComplete = history.oneCloneRouteCleared && history.twoCloneRouteCleared &&
             history.finalChallengeCleared;
-        status.oneCloneRecordingStored = progress.recordTakeCount == 1 && storedCloneCount == 1 &&
-            progress.recordStopped;
         status.twoCloneRecordingsStored = progress.recordTakeCount == 2 && storedCloneCount == 2 &&
             progress.recordStopped;
-        status.oneCloneTutorialCheckCount = (status.oneCloneRecordingStored ? 1 : 0) +
-            (replay.oneCloneToggleActivated ? 1 : 0) + (replay.oneCloneElevatorRidden ? 1 : 0) +
-            (replay.oneCloneBasicsComplete ? 1 : 0);
         status.twoCloneTutorialCheckCount = (status.twoCloneRecordingsStored ? 1 : 0) +
             (replay.twoCloneReplayPrepared ? 1 : 0) + (replay.twoCloneSwitchesActivated ? 1 : 0) +
             (replay.twoCloneCooperationComplete ? 1 : 0);
@@ -148,14 +138,12 @@ struct PastSelfTutorialState {
     }
 
     /// <summary>
-    /// 実績と計測値を残して再生準備し、解放済みの扉と橋を復元する。
+    /// 実績と計測値を残して再生準備し、解放済みの橋だけを復元する。
     /// </summary>
     void PrepareReplay(bool registerPrepareAction, size_t cloneCount, float feedbackDuration)
     {
         gimmicks = {};
         replay = {};
-        gimmicks.doorOpen = progress.doorOpenedByClone;
-        gimmicks.doorUnlockedByClone = progress.doorOpenedByClone;
         gimmicks.goalBridgeDeployed = progress.goalBridgeUnlocked;
         replay.twoCloneReplayPrepared = registerPrepareAction && progress.recordTakeCount == 2 && cloneCount == 2;
         replay.prepareFeedbackSeconds = registerPrepareAction ? feedbackDuration : 0.0f;

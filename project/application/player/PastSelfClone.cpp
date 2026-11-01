@@ -111,6 +111,8 @@ void PastSelfClone::Initialize(Object3dCommon* object3dCommon, ImGuiManager* img
 /// </summary>
 void PastSelfClone::Finalize()
 {
+    afterPlaybackSeconds_ = 0.0f;
+    isPaused_ = false;
     object3d_.reset();
     frames_.clear();
     currentState_ = PlayerState {};
@@ -129,6 +131,8 @@ bool PastSelfClone::Load(const std::vector<PastSelfFrame>& sourceFrames)
     }
 
     frames_ = sourceFrames;
+    afterPlaybackSeconds_ = 0.0f;
+    isPaused_ = false;
     const float firstTime = frames_.front().time; // 再生開始時刻を0秒へそろえるための基準
     for (PastSelfFrame& frame : frames_) {
         frame.time -= firstTime;
@@ -154,6 +158,8 @@ bool PastSelfClone::Start()
     playbackTime_ = 0.0f;
     currentState_ = frames_.front().state;
     isPlaying_ = true;
+    afterPlaybackSeconds_ = 0.0f;
+    isPaused_ = false;
     isVisible_ = true;
     ApplyStateMaterialColor();
     return true;
@@ -184,6 +190,8 @@ void PastSelfClone::SetMaterialColors(const Math::Vector4& playingColor, const M
 /// </summary>
 void PastSelfClone::Stop()
 {
+    afterPlaybackSeconds_ = 0.0f;
+    isPaused_ = false;
     isPlaying_ = false;
     isVisible_ = false;
     playbackTime_ = 0.0f;
@@ -195,6 +203,7 @@ void PastSelfClone::Stop()
 /// </summary>
 void PastSelfClone::Pause()
 {
+    isPaused_ = true;
     isPlaying_ = false;
     ApplyStateMaterialColor();
 }
@@ -208,7 +217,8 @@ void PastSelfClone::ApplyStateMaterialColor()
         return;
     }
 
-    const Math::Vector4 currentMaterialColor = (useStateMaterialColor_ && !isPlaying_) ? finishedMaterialColor_ : materialColor_; // 現在の再生状態に応じた表示色
+    Math::Vector4 currentMaterialColor = (useStateMaterialColor_ && !isPlaying_) ? finishedMaterialColor_ : materialColor_; // 現在の再生状態に応じた表示色
+    currentMaterialColor.w *= 1.0f - GetFadeProgress();
     object3d_->SetMaterialColor(currentMaterialColor);
 }
 
@@ -250,18 +260,27 @@ PlayerState PastSelfClone::SampleState(float playbackTime) const
 }
 
 /// <summary>
-/// 分身の再生状態を更新する。
+/// 記録を再生し、終端後はその位置で薄くなって消えるまで更新する。
 /// </summary>
 void PastSelfClone::Update(float deltaTime, const std::vector<StandablePlatform>& standablePlatforms)
 {
-    if (!isPlaying_ || frames_.size() < 2) {
+    if (!isVisible_ || isPaused_ || frames_.size() < 2 || !std::isfinite(deltaTime) || deltaTime <= 0.0f) {
+        return;
+    }
+    if (!isPlaying_) {
+        UpdateAfterPlayback(deltaTime);
+        return;
+    }
+    const float playbackDeltaTime = deltaTime * playbackSpeed_; // 記録再生だけに適用する再生速度込みの時間
+    if (playbackDeltaTime <= 0.0f) {
         return;
     }
 
     const Vector3 cloneHalfSize = CalculateBodyHalfSize(currentState_.transform); // 更新前の分身半サイズ
     const float previousFootY = currentState_.transform.translate.y - cloneHalfSize.y; // 更新前の足元Y座標
     const float duration = frames_.back().time; // 記録全体の再生時間
-    playbackTime_ += deltaTime * playbackSpeed_;
+    playbackTime_ += playbackDeltaTime;
+    const float remainingDeltaTime = (std::max)(playbackTime_ - duration, 0.0f) / playbackSpeed_; // 終端をまたいだ更新のうち残像へ使うゲーム時間
     if (playbackTime_ >= duration) {
         if (loopPlayback_ && duration > 0.0f) {
             playbackTime_ = 0.0f;
@@ -273,13 +292,37 @@ void PastSelfClone::Update(float deltaTime, const std::vector<StandablePlatform>
 
     currentState_ = SampleState(playbackTime_);
     ResolveLandingOnPlatforms(previousFootY, standablePlatforms);
+    if (!isPlaying_) {
+        currentState_.isMoving = false;
+        UpdateAfterPlayback(remainingDeltaTime);
+    }
+    ApplyStateMaterialColor();
+}
+
+/// <summary>
+/// 再生終了後の残像が消えるまでの進行率を取得する。
+/// </summary>
+float PastSelfClone::GetFadeProgress() const
+{
+    return (std::clamp)(afterPlaybackSeconds_ / kAfterPlaybackSeconds, 0.0f, 1.0f);
+}
+
+/// <summary>
+/// 終端後の位置を保持し、残像の寿命と表示・判定の消失を更新する。
+/// </summary>
+void PastSelfClone::UpdateAfterPlayback(float deltaTime)
+{
+    afterPlaybackSeconds_ = (std::min)(afterPlaybackSeconds_ + deltaTime, kAfterPlaybackSeconds);
+    if (afterPlaybackSeconds_ >= kAfterPlaybackSeconds) {
+        isVisible_ = false;
+    }
     ApplyStateMaterialColor();
 }
 
 /// <summary>
 /// 上面足場への着地だけを再生後の分身状態へ反映する。
 /// </summary>
-void PastSelfClone::ResolveLandingOnPlatforms(float previousFootY, const std::vector<StandablePlatform>& standablePlatforms)
+bool PastSelfClone::ResolveLandingOnPlatforms(float previousFootY, const std::vector<StandablePlatform>& standablePlatforms)
 {
     const Vector3 cloneHalfSize = CalculateBodyHalfSize(currentState_.transform); // 現在の分身半サイズ
     const float currentFootY = currentState_.transform.translate.y - cloneHalfSize.y; // 現在の足元Y座標
@@ -304,11 +347,12 @@ void PastSelfClone::ResolveLandingOnPlatforms(float previousFootY, const std::ve
     }
 
     if (!hasLandingPlatform) {
-        return;
+        return false;
     }
 
     currentState_.transform.translate.y = landingTopY + cloneHalfSize.y;
     currentState_.isGrounded = true;
+    return true;
 }
 
 /// <summary>
@@ -372,6 +416,7 @@ void PastSelfClone::DrawImGui()
     ImGui::Text("Frames: %zu", frames_.size());
     ImGui::Text("Playback Time: %.2f sec", playbackTime_);
     ImGui::Text("Duration: %.2f sec", frames_.empty() ? 0.0f : frames_.back().time);
+    ImGui::Text("Fade: %.0f%%", GetFadeProgress() * 100.0f);
     ImGui::Text("Standable: %s", (isVisible_ && standableEnabled_) ? "true" : "false");
     ImGui::DragFloat("Playback Speed", &playbackSpeed_, kImGuiPlaybackSpeedStep, kMinimumPlaybackSpeed, kMaximumPlaybackSpeed);
     ImGui::Checkbox("Smooth Playback", &smoothPlayback_);

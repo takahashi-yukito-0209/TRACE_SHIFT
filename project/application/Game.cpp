@@ -17,7 +17,10 @@
 #include "TextureManager.h"
 #include "WinApp.h"
 #include "application/scenes/SceneFactory.h"
+#include "application/scenes/StageSelectionState.h"
 #include "engine/base/SceneManager.h"
+#include "engine/base/PostProcess.h"
+#include "engine/base/RenderTarget.h"
 #include "engine/base/SrvManager.h"
 #include "engine/debug/DebugRenderer.h"
 #include "engine/sound/Sound.h"
@@ -25,6 +28,7 @@
 #include "externals/DirectXTex/d3dx12.h"
 #include "mathUtility.h"
 #include <Windows.h>
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cmath>
@@ -59,7 +63,7 @@ using namespace MyEngine;
 using namespace Math;
 
 namespace {
-constexpr const char* kInitialSceneName = "Play"; // 起動時に最初に表示するシーン名
+constexpr const char* kInitialSceneName = "Title"; // 起動時にデモ付きタイトルを表示するシーン名
 constexpr Vector3 kInitialCameraRotate = { 5.9f, -7.43f, 0.0f };
 constexpr Vector3 kInitialCameraTranslate = { 0.0f, 1.0f, -18.0f };
 constexpr Vector4 kWhiteColor = { 1.0f, 1.0f, 1.0f, 1.0f }; // 白色
@@ -81,6 +85,14 @@ constexpr float kDefaultCameraZoomSpeed = 0.05f;
 constexpr int kMouseButtonLeft = 0; // 左マウスボタン番号
 constexpr int kMouseButtonMiddle = 2; // 中マウスボタン番号
 constexpr float kFixedDeltaTime = 1.0f / 60.0f;
+constexpr float kSceneFadeOutDuration = 0.55f; // 中央への収束から暗転までの時間
+constexpr float kSceneFadeInDuration = 0.65f; // 歪みをほどいて色を戻す時間
+constexpr float kSceneFadeOutDarkenStart = 0.25f; // 収束が見えてから黒を重ね始める時間率
+constexpr float kSceneTransitionContraction = 0.18f; // 暗転直前に中心へ縮める画面の割合
+constexpr float kSceneTransitionExpansion = 0.08f; // 明転開始時に残す画面の縮小割合
+constexpr float kSceneTransitionDistortionStrength = 0.035f; // 暗転直前の画面歪み強度
+constexpr float kSceneTransitionBlurWidth = 0.012f; // 暗転直前の放射状ブラー幅
+enum class SceneFadePhase { Idle, FadeOut, Black, Prepare, FadeIn }; // 切替後の描画準備まで黒で隠す遷移段階
 constexpr size_t kLogDateBufferSize = 32;
 constexpr size_t kDebugCameraLogBufferSize = 128;
 }
@@ -116,6 +128,7 @@ struct Game::Impl {
     std::unique_ptr<Object3d> particlePlane;
 
     std::unique_ptr<SceneManager> sceneManager;
+    std::shared_ptr<GameApp::StageSelectionState> stageSelection = std::make_shared<GameApp::StageSelectionState>(); // シーン切替後も保持する選択位置とクリア履歴
 
     ParticleEmitter pmEmitter;
 
@@ -126,6 +139,16 @@ struct Game::Impl {
     ImGuiManager imguiManager;
 
     std::string pendingSceneName;
+    std::unique_ptr<Sprite> sceneFadeSprite; // シーン破棄の影響を受けない画像なしの暗転矩形
+    SceneFadePhase sceneFadePhase = SceneFadePhase::Idle; // シーン遷移の現在段階
+    float sceneFadeTime = 0.0f; // 現在のフェード段階で経過した時間
+    float sceneFadeAlpha = 0.0f; // 共通暗転矩形の不透明度
+    bool blackFrameDrawn = false; // 完全な黒を一度描画してから切り替えるための確認値
+    RenderTarget sceneTransitionTarget; // UIを含む最終画面を収集する描画先
+    RenderTarget sceneTransitionIntermediateTarget; // 歪みからブラーへ渡す描画先
+    PostProcess sceneTransitionPostProcess; // ゲーム内時間演出から独立した遷移用設定
+    bool sceneTransitionCaptureActive = false; // 今回の描画で画面を収集中か
+    int sceneTransitionOutputHandle = -1; // 演出結果を戻す描画先（-1はバックバッファ）
 };
 
 /// <summary>
@@ -339,6 +362,24 @@ void Game::SetupResizeCallbacks()
 /// </summary>
 void Game::InitializeScene()
 {
+    impl_->sceneFadeSprite = std::make_unique<Sprite>();
+    impl_->sceneFadeSprite->InitializeSolidColor(impl_->spriteCommon.get(), &impl_->srvManager);
+    DirectXCommon* directXCommon = DirectXCommon::GetInstance(); // 共通遷移リソースの作成先
+    RenderTargetDesc transitionDesc {}; // ウィンドウサイズへ追従する遷移用描画設定
+    transitionDesc.width = static_cast<uint32_t>(directXCommon->GetRenderWidth());
+    transitionDesc.height = static_cast<uint32_t>(directXCommon->GetRenderHeight());
+    transitionDesc.format = directXCommon->GetSwapChainFormat();
+    transitionDesc.resizeWithWindow = true;
+    transitionDesc.useDepth = true;
+    impl_->sceneTransitionTarget.Initialize(directXCommon, transitionDesc);
+    transitionDesc.useDepth = false;
+    impl_->sceneTransitionIntermediateTarget.Initialize(directXCommon, transitionDesc);
+    impl_->sceneTransitionPostProcess.Initialize(directXCommon);
+    impl_->sceneTransitionPostProcess.SetDistortionCenter({ 0.5f, 0.5f });
+    impl_->sceneTransitionPostProcess.SetDistortionRadius(1.2f);
+    impl_->sceneTransitionPostProcess.SetDistortionWaveCount(2.0f);
+    impl_->sceneTransitionPostProcess.SetRadialBlurCenter({ 0.5f, 0.5f });
+    impl_->sceneTransitionPostProcess.SetRadialBlurSampleCount(12u);
     impl_->sceneManager = std::make_unique<SceneManager>();
     impl_->sceneManager->Initialize();
     SetupResizeCallbacks();
@@ -353,12 +394,16 @@ void Game::InitializeScene()
     sctx.directXCommon = DirectXCommon::GetInstance();
     sctx.debugRenderer = impl_->debugRenderer.get();
     sctx.imguiManager = &impl_->imguiManager;
+    sctx.soundSystem = &impl_->soundSystem;
     sctx.requestSceneChange = [this](const std::string& sceneName) {
-        impl_->pendingSceneName = sceneName;
+        RequestSceneChange(sceneName);
     };
+    sctx.drawSceneTransition = [this]() { DrawSceneTransition(); };
+    sctx.isSceneTransitionActive = [this]() { return impl_->sceneFadePhase != SceneFadePhase::Idle; };
+    sctx.beginSceneTransition = [this](int outputTargetHandle) { BeginSceneTransition(outputTargetHandle); };
     impl_->sceneManager->SetContext(sctx);
 
-    auto initial = GameApp::SceneFactory::Create(kInitialSceneName);
+    auto initial = GameApp::SceneFactory::Create(kInitialSceneName, impl_->stageSelection);
     if (initial) {
         impl_->sceneManager->ChangeScene(std::move(initial));
     }
@@ -549,8 +594,118 @@ void Game::Update()
         }
     }
 
-    if (impl_->sceneManager) {
+    UpdateSceneTransition(dt);
+    if (impl_->sceneManager && (impl_->sceneFadePhase == SceneFadePhase::Idle || impl_->sceneFadePhase == SceneFadePhase::FadeIn)) {
         impl_->sceneManager->Update(dt);
+    }
+}
+
+/// <summary>
+/// 重複要求を防ぎ、シーン切り替え前の暗転を開始する。
+/// </summary>
+void Game::RequestSceneChange(const std::string& sceneName)
+{
+    if (sceneName == "Play" && impl_->stageSelection &&
+        !impl_->stageSelection->IsStageUnlocked(impl_->stageSelection->selectedStageIndex)) {
+        return;
+    }
+    if (!GameApp::SceneFactory::IsSceneAvailable(sceneName) || !impl_->sceneManager || impl_->sceneFadePhase != SceneFadePhase::Idle ||
+        impl_->sceneManager->GetCurrentSceneName() == sceneName) {
+        return;
+    }
+    impl_->pendingSceneName = sceneName;
+    impl_->sceneFadePhase = SceneFadePhase::FadeOut;
+    impl_->sceneFadeTime = 0.0f;
+    impl_->blackFrameDrawn = false;
+}
+
+/// <summary>
+/// シーン切り替え前後のフェード透明度を更新する。
+/// </summary>
+void Game::UpdateSceneTransition(float dt)
+{
+    if (impl_->sceneFadePhase == SceneFadePhase::Prepare && impl_->blackFrameDrawn) {
+        // 次のシーンを黒で隠して一度描画してから明転を始める。
+        impl_->sceneFadePhase = SceneFadePhase::FadeIn;
+        impl_->sceneFadeTime = 0.0f;
+        impl_->blackFrameDrawn = false;
+        return;
+    }
+    if (impl_->sceneFadePhase != SceneFadePhase::FadeOut && impl_->sceneFadePhase != SceneFadePhase::FadeIn) {
+        return;
+    }
+    impl_->sceneFadeTime += (std::max)(dt, 0.0f);
+    const float duration = impl_->sceneFadePhase == SceneFadePhase::FadeOut ? kSceneFadeOutDuration : kSceneFadeInDuration; // 現在段階の演出時間
+    const float rate = (std::clamp)(impl_->sceneFadeTime / duration, 0.0f, 1.0f); // フェード段階内の時間率
+    const float fadeRate = impl_->sceneFadePhase == SceneFadePhase::FadeOut
+        ? (std::clamp)((rate - kSceneFadeOutDarkenStart) / (1.0f - kSceneFadeOutDarkenStart), 0.0f, 1.0f)
+        : rate; // 暗転だけ開始を遅らせて収束と白黒化を見せる時間率
+    const float easedRate = fadeRate * fadeRate * (3.0f - 2.0f * fadeRate); // 開始と終了を緩やかにする透明度変化率
+    impl_->sceneFadeAlpha = impl_->sceneFadePhase == SceneFadePhase::FadeOut ? easedRate : 1.0f - easedRate;
+    if (rate >= 1.0f) {
+        impl_->sceneFadePhase = impl_->sceneFadePhase == SceneFadePhase::FadeOut ? SceneFadePhase::Black : SceneFadePhase::Idle;
+    }
+}
+
+/// <summary>
+/// 遷移中の最終画面を専用描画先へ集める。
+/// </summary>
+void Game::BeginSceneTransition(int outputTargetHandle)
+{
+    if (impl_->sceneFadePhase == SceneFadePhase::Idle || impl_->sceneTransitionCaptureActive ||
+        !impl_->sceneTransitionTarget.IsValid() || !impl_->sceneTransitionTarget.HasColorSrv() ||
+        !impl_->sceneTransitionIntermediateTarget.IsValid() || !impl_->sceneTransitionIntermediateTarget.HasColorSrv() ||
+        !impl_->sceneTransitionPostProcess.IsReady() || !impl_->sceneTransitionPostProcess.IsDistortionReady() ||
+        !impl_->sceneTransitionPostProcess.IsRadialBlurReady()) {
+        return;
+    }
+    impl_->sceneTransitionOutputHandle = outputTargetHandle;
+    impl_->sceneTransitionTarget.Begin(true);
+    impl_->sceneTransitionCaptureActive = true;
+}
+
+/// <summary>
+/// 現在の描画先へ画像なしの黒いフェードを重ねる。
+/// </summary>
+void Game::DrawSceneTransition()
+{
+    if (impl_->sceneTransitionCaptureActive) {
+        impl_->sceneTransitionTarget.End();
+        const bool isFadeOut = impl_->sceneFadePhase == SceneFadePhase::FadeOut; // 中央へ収束させる段階か
+        const float outRate = (std::clamp)(impl_->sceneFadeTime / kSceneFadeOutDuration, 0.0f, 1.0f); // 収束段階の時間率
+        const float effectWeight = isFadeOut ? outRate * outRate : impl_->sceneFadeAlpha; // 収束を加速し、明転では滑らかに弱める強度
+        impl_->sceneTransitionPostProcess.SetDistortionStrength(kSceneTransitionDistortionStrength * effectWeight);
+        impl_->sceneTransitionPostProcess.SetDistortionProgress(
+            impl_->sceneFadePhase == SceneFadePhase::FadeOut ? effectWeight : 2.0f - effectWeight);
+        impl_->sceneTransitionPostProcess.SetRadialBlurWidth(kSceneTransitionBlurWidth * effectWeight);
+        impl_->sceneTransitionPostProcess.SetRadialBlurScale(1.0f -
+            (isFadeOut ? kSceneTransitionContraction : kSceneTransitionExpansion) * effectWeight);
+        impl_->sceneTransitionPostProcess.SetRadialBlurGrayscaleAmount(
+            isFadeOut ? (std::min)(outRate * 1.5f, 1.0f) : effectWeight);
+        impl_->sceneTransitionIntermediateTarget.Begin(true);
+        impl_->sceneTransitionPostProcess.DrawTexture(impl_->sceneTransitionTarget.GetColorSrvIndex(), PostEffectType::Distortion);
+        impl_->sceneTransitionIntermediateTarget.End();
+        // Endはバックバッファへ戻すため、Scene Viewの描画先を明示的に復帰する。
+        if (impl_->sceneTransitionOutputHandle >= 0) {
+            DirectXCommon::GetInstance()->BeginRenderTo(impl_->sceneTransitionOutputHandle, false);
+        }
+        impl_->sceneTransitionPostProcess.DrawTexture(impl_->sceneTransitionIntermediateTarget.GetColorSrvIndex(), PostEffectType::RadialBlur);
+        impl_->sceneTransitionCaptureActive = false;
+    }
+    if (!impl_->sceneFadeSprite || impl_->sceneFadeAlpha <= 0.0f) {
+        return;
+    }
+    DirectXCommon* directXCommon = DirectXCommon::GetInstance(); // 現在の描画サイズを取得する基盤
+    const BlendMode previousBlend = impl_->spriteCommon->GetBlendMode(); // フェード前のスプライト描画設定
+    impl_->spriteCommon->SetBlendMode(BlendMode::Alpha);
+    impl_->spriteCommon->SetCommonDrawSetting();
+    impl_->sceneFadeSprite->SetSize({ static_cast<float>(directXCommon->GetRenderWidth()), static_cast<float>(directXCommon->GetRenderHeight()) });
+    impl_->sceneFadeSprite->SetColor({ 0.0f, 0.0f, 0.0f, impl_->sceneFadeAlpha });
+    impl_->sceneFadeSprite->Update();
+    impl_->sceneFadeSprite->Draw();
+    impl_->spriteCommon->SetBlendMode(previousBlend);
+    if (impl_->sceneFadePhase == SceneFadePhase::Black || impl_->sceneFadePhase == SceneFadePhase::Prepare) {
+        impl_->blackFrameDrawn = true;
     }
 }
 
@@ -566,15 +721,22 @@ void Game::Draw()
 
     impl_->imguiManager.NewFrame();
 
-    if (impl_->pendingSceneName.size() > 0) {
+    if (impl_->sceneFadePhase == SceneFadePhase::Black && impl_->blackFrameDrawn) {
         if (impl_->sceneManager && impl_->sceneManager->GetCurrentSceneName() == impl_->pendingSceneName) {
             impl_->pendingSceneName.clear();
         } else {
-            auto newScene = GameApp::SceneFactory::Create(impl_->pendingSceneName);
+            auto newScene = GameApp::SceneFactory::Create(impl_->pendingSceneName, impl_->stageSelection);
             if (newScene && impl_->sceneManager) {
                 impl_->sceneManager->ChangeScene(std::move(newScene));
             }
             impl_->pendingSceneName.clear();
+        }
+        impl_->sceneFadePhase = SceneFadePhase::Prepare;
+        impl_->sceneFadeTime = 0.0f;
+        impl_->blackFrameDrawn = false;
+        if (impl_->sceneManager) {
+            // 入力を止めた状態で描画行列を整え、このフレームを黒で隠して描画する。
+            impl_->sceneManager->Update(0.0f);
         }
     }
     ImGuiManager::Context ctx;
@@ -636,7 +798,7 @@ void Game::Draw()
     ctx.particleManager = ParticleManager::GetInstance();
     ctx.requestSceneChange = [this](const char* sceneName) {
         if (sceneName) {
-            impl_->pendingSceneName = sceneName;
+            RequestSceneChange(sceneName);
         }
     };
     if (impl_->sceneManager) {
@@ -701,6 +863,10 @@ void Game::Finalize()
     impl_->particlePlane.reset();
     impl_->objects3d.clear();
     impl_->sprites.clear();
+    impl_->sceneFadeSprite.reset();
+    impl_->sceneTransitionTarget.Finalize();
+    impl_->sceneTransitionIntermediateTarget.Finalize();
+    impl_->sceneTransitionPostProcess.Finalize();
     impl_->camera.reset();
 
     ParticleManager::GetInstance()->Finalize();

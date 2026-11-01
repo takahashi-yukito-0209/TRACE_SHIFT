@@ -2,8 +2,6 @@
 #include "../../engine/base/IScene.h"
 #include "../../engine/base/PostProcess.h"
 #include "../../engine/base/RenderTarget.h"
-#include "../../engine/level/LevelData.h"
-#include "../../engine/utility/CollisionSystem.h"
 #include "../effects/TemporalRiftEffect.h"
 #include "../effects/TimeReversalEffect.h"
 #include "../effects/TimeStopEffect.h"
@@ -12,13 +10,19 @@
 #include "../player/PastSelfRecorder.h"
 #include "../player/Player.h"
 #include "StageRuleSettings.h"
+#include "ClonePlatformCourseState.h"
+#include "StageStartSequenceState.h"
+#include "StageFailureSequenceState.h"
+#include "PauseMenuState.h"
 #include "TraceShiftStageJson.h"
 #include "PlaySceneEditorState.h"
 #include "PastSelfTutorialState.h"
+#include "StageSelectionState.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,6 +34,7 @@ class SpriteCommon;
 class Object3dCommon;
 class Camera;
 class SkyBox;
+class SoundClip;
 }
 
 #include "../../engine/particle/ParticleEmitter.h"
@@ -42,7 +47,7 @@ public: // メンバ関数
     /// <summary>
     /// コンストラクタ
     /// </summary>
-    PlayScene();
+    explicit PlayScene(std::shared_ptr<GameApp::StageSelectionState> stageSelection = nullptr);
 
     /// <summary>
     /// デストラクタ
@@ -114,11 +119,6 @@ public: // メンバ関数
     void NotifyObjectTransformEdited(size_t objectIndex) override;
 
     /// <summary>
-    /// Scene View画像上へLevel Editor用の編集表示を重ねて描画する。
-    /// </summary>
-    void DrawSceneViewOverlay(const Math::Matrix4x4& viewProjectionMatrix, float imageMinX, float imageMinY, float imageWidth, float imageHeight) override;
-
-    /// <summary>
     /// Level EditorとGizmoで共有する選択中3Dオブジェクト番号を取得する。
     /// </summary>
     int GetSelectedSceneObjectIndex() const;
@@ -138,6 +138,122 @@ public: // メンバ関数
     void FillParticleEmitterPointers(std::vector<::ParticleEmitter*>* out) override;
 
 private:
+    PauseMenuState pauseMenu_; // ポーズ・操作説明・確認画面の選択状態
+    std::unique_ptr<MyEngine::Sprite> pauseDimmer_; // ポーズ中にゲーム画面を暗くする背景
+    std::unique_ptr<MyEngine::Sprite> pausePanel_; // 文字を読みやすくするメニューの背景
+    std::unique_ptr<MyEngine::Sprite> pauseCursor_; // 選択中の項目を示すライン
+    std::vector<std::unique_ptr<MyEngine::Sprite>> pauseTexts_; // 見出し・項目・補足を独立した描画定数で表示する文字
+    std::unique_ptr<MyEngine::Sprite> pauseControls_; // タイトルと共通の操作説明画像
+
+    /// <summary>
+    /// ポーズと操作説明に使う表示部品を初期化する。
+    /// </summary>
+    void InitializePauseMenu();
+
+    /// <summary>
+    /// ポーズの入力と確認済み操作を処理し、そのフレームをゲームへ渡さないか返す。
+    /// </summary>
+    bool HandlePauseMenuInput();
+
+    /// <summary>
+    /// ポーズの背景・項目・操作説明をゲーム画面へ重ねる。
+    /// </summary>
+    void DrawPauseMenu();
+
+    std::shared_ptr<GameApp::StageSelectionState> stageSelection_; // 選択画面と共有する起動中の攻略履歴
+    std::unique_ptr<MyEngine::Sprite> stageIntroSprite_; // ステージ開始時に短く表示する番号とテーマ
+    std::unique_ptr<MyEngine::Sprite> stageOverlayBackground_; // 開始文字の背景となる上部の帯
+    StageStartSequenceState stageStartSequence_; // 表示・音・光・操作解禁で共有する演出時間
+    StageFailureSequenceState stageFailureSequence_; // 失敗時の明滅・暗転・復帰の演出時間
+    std::unique_ptr<MyEngine::Sprite> stageFailureDim_; // 画面外の落下でも失敗を伝える暗幕
+    std::shared_ptr<MyEngine::SoundClip> stageFailureSound_; // 開始音と同じ系統の短い下降音
+    std::unique_ptr<MyEngine::Object3d> stageStartRing_; // 操作解禁時に足元へ広がる表示専用リング
+    std::optional<size_t> stageFailureHazardBlockIndex_; // 今回の失敗で発光させる危険エリアの番号
+    float stageFailureRecoilSide_ = -1.0f; // 表示用の本体がのけぞる横方向（左が負、右が正）
+    float stageFailureFallVelocity_ = 0.0f; // 失敗確定直前から引き継ぐ表示用の落下速度
+    bool useQuickFailurePresentation_ = true; // 次の失敗から約1秒の軽い演出を使うか
+    bool useFailureImpactFeedback_ = true; // 次の接触失敗で火花とカメラ反応を使うか
+    bool useFailureCameraShake_ = true; // 次の接触失敗で弱いカメラ振動を使うか
+    bool stageFailureImpactEnabled_ = false; // 今回の失敗で追加の接触演出を再生するか
+    bool stageFailureCameraShakeEnabled_ = false; // 演出開始時に固定するカメラ振動の設定
+    Math::Vector3 stageFailureContactPoint_ {}; // 危険エリア表面に置く接触火花の中心
+    Math::Vector3 stageFailureCameraOrigin_ {}; // カメラ振動を加える前の位置
+    std::array<std::unique_ptr<MyEngine::Object3d>, 4> stageFailureSparks_; // 接触箇所から短く散る表示専用の火花
+    std::unique_ptr<MyEngine::Object3d> stageStartBody_; // 出現・失敗中だけ本体に代える表示専用モデル
+    std::unique_ptr<MyEngine::Sprite> stageStartDim_; // 出現開始から通常の明るさへ戻す画面の薄暗幕
+    std::shared_ptr<MyEngine::SoundClip> stageStartSound_; // 全体音量設定に従う短い開始音
+    Math::Vector3 stageStartOrigin_ {}; // 開始時点の足元に固定するリング位置
+
+    /// <summary>
+    /// 選択ステージの開始表示を初期化する。
+    /// </summary>
+    void InitializeStageSelectionOverlay();
+
+    /// <summary>
+    /// 初回または短いリトライの開始演出と、光の発生位置を設定する。
+    /// </summary>
+    void BeginStageStartPresentation(bool retry);
+
+    /// <summary>
+    /// 開始演出を進め、操作解禁と同じ更新で開始音を一度再生する。
+    /// </summary>
+    void UpdateStageStartPresentation(float deltaTime);
+
+    /// <summary>
+    /// 実体化する本体と開始リングの描画状態を更新する。
+    /// </summary>
+    void UpdateStageStartPresentationVisuals();
+
+    /// <summary>
+    /// 失敗原因に応じて進行を止め、接触反応または落下後の暗転を開始する。
+    /// </summary>
+    void BeginStageFailurePresentation(StageFailureSequenceState::Cause cause = StageFailureSequenceState::Cause::Contact);
+
+    /// <summary>
+    /// 暗転中に現在区間へ復帰し、短い開始演出と明転を進める。
+    /// </summary>
+    void UpdateStageFailurePresentation(float deltaTime);
+
+    /// <summary>
+    /// 当たり判定を変えず、通常色の本体に接触時ののけぞりか落下時の姿勢崩れを表示する。
+    /// </summary>
+    void UpdateStageFailureBodyVisuals(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix);
+
+    /// <summary>
+    /// 接触時に一度だけカメラを小さく揺らし、元の位置へ戻す。
+    /// </summary>
+    void UpdateStageFailureCamera();
+
+    /// <summary>
+    /// 失敗の静止時間内だけ接触箇所の小さな火花を更新する。
+    /// </summary>
+    void UpdateStageFailureSparks(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix);
+
+    /// <summary>
+    /// 提出用の到達判定を検出し、クリア履歴を記録せずタイトルへ戻す。
+    /// </summary>
+    bool HandleStageCompletion();
+
+    /// <summary>
+    /// 現在の配置ファイルとルートでゴール・クリアを有効にするか確認する。
+    /// </summary>
+    bool IsPastSelfTutorialCompletionEnabled() const;
+
+    /// <summary>
+    /// 選択中ルートに危険エリアが配置されているか確認する。
+    /// </summary>
+    bool HasHazardAreasForCurrentRoute() const;
+
+    /// <summary>
+    /// 本体が最初に接触する危険エリアの番号と移動割合を取得する。
+    /// </summary>
+    bool TryGetHazardContact(const PlayerState& previousState, float& contactFraction, size_t& blockIndex) const;
+
+    /// <summary>
+    /// 開始時の文字をゲーム画面へ重ねる。
+    /// </summary>
+    void DrawStageSelectionOverlay();
+
     /// <summary>
     /// 分身チュートリアル用のステージブロック。
     /// </summary>
@@ -147,8 +263,9 @@ private:
         SolidCollider collider; // 地形として全面衝突する情報
         Math::Vector4 baseColor { 1.0f, 1.0f, 1.0f, 1.0f }; // 通常時の表示色
         uint32_t routeMask = 0; // このブロックを使用するチュートリアルルート
-        bool oneCloneGoalPlatform = false; // 1体ルートの到達床として色を切り替えるか
+        bool oneCloneGoalPlatform = false; // 1体ルートの到達判定とクリア時の変色に使う床か
         bool goalMarker = false; // ゴール表示用のブロックか
+        bool hazard = false; // 通常スイッチで停止する危険エリアか
     };
 
     /// <summary>
@@ -187,7 +304,7 @@ private:
     /// 分身チュートリアルで使用する攻略ルート種別。
     /// </summary>
     enum class PastSelfTutorialRoute {
-        OneCloneBasics, // 分身1体でトグル昇降床を攻略するルート
+        OneCloneBasics, // 足場・移動・再合流を順に学ぶ分身足場コース
         TwoCloneCooperation, // 分身2体で緑と青のスイッチを同時起動するルート
         FinalChallenge, // すべてのギミックを確認する総合ルート
     };
@@ -261,84 +378,9 @@ private:
     void DrawEffectControllerImGui();
 
     /// <summary>
-    /// ImGuiでシーン内3Dオブジェクトの生成と削除を行う
-    /// </summary>
-    void DrawSceneObjectEditImGui();
-
-    /// <summary>
     /// 実ステージで使用中のオブジェクト編集ImGuiを描画する。
     /// </summary>
     void DrawPastSelfTutorialStageEditorImGui();
-
-    /// <summary>
-    /// ImGuiでレベルJSONの読み込み状態を表示する。
-    /// </summary>
-    void DrawLevelDataImGui();
-
-    /// <summary>
-    /// LevelData編集ImGuiの一時状態を保持する。
-    /// </summary>
-    using LevelEditorImGuiState = PlaySceneLevelEditorState;
-
-    /// <summary>
-    /// LevelData編集ImGuiからレベル再読み込みを実行する。
-    /// </summary>
-    bool ExecuteLevelEditorReload(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiからレベル保存を実行する。
-    /// </summary>
-    void ExecuteLevelEditorSave();
-
-    /// <summary>
-    /// LevelData編集ImGuiから保存後再読み込みを実行する。
-    /// </summary>
-    void ExecuteLevelEditorSaveAndReload(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの読み込み操作を描画する。
-    /// </summary>
-    void DrawLevelLoadSectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの保存操作を描画する。
-    /// </summary>
-    void DrawLevelSaveSectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiのPrefab操作を描画する。
-    /// </summary>
-    void DrawLevelPrefabSectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiのシーン反映操作を描画する。
-    /// </summary>
-    void DrawLevelSceneApplySectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの状態表示を描画する。
-    /// </summary>
-    void DrawLevelStatusSectionImGui();
-
-    /// <summary>
-    /// LevelData編集ImGuiの確認ポップアップを描画する。
-    /// </summary>
-    void DrawLevelConfirmPopupsImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの階層オブジェクト編集を描画する。
-    /// </summary>
-    void DrawLevelObjectsSectionImGui(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// LevelData編集ImGuiの遅延履歴と自動保存を処理する。
-    /// </summary>
-    void FlushLevelEditorDeferredActions(LevelEditorImGuiState& state);
-
-    /// <summary>
-    /// ImGuiで衝突判定の状態を表示する。
-    /// </summary>
-    void DrawCollisionDebugImGui();
 
     /// <summary>
     /// ImGuiでシーン内スプライトの生成と削除を行う。
@@ -361,15 +403,9 @@ private:
     bool IsAnyEffectPlaying() const;
 
     /// <summary>
-    /// エフェクト開始入力を処理する。
-    /// </summary>
-    void HandleEffectStartInput();
-
-    /// <summary>
-    /// ポストエフェクト切り替え入力を処理する。
+    /// 開発ビルドでポストエフェクトの検証用切り替え入力を処理する。
     /// </summary>
     void HandlePostProcessShortcutInput();
-
 
     /// <summary>
     /// 分身チュートリアル用オブジェクトを初期化する。
@@ -452,6 +488,11 @@ private:
     void UpdatePastSelfTutorial(float deltaTime);
 
     /// <summary>
+    /// ゲーム進行を変えずにステージとプレイヤーの描画行列を更新する。
+    /// </summary>
+    void UpdatePastSelfTutorialVisuals();
+
+    /// <summary>
     /// 分身チュートリアル用の分身ギミックを初期化する。
     /// </summary>
     void InitializePastSelfTutorialMechanics();
@@ -532,6 +573,21 @@ private:
     bool IsPastSelfTutorialStageBlockEnabled(size_t blockIndex) const;
 
     /// <summary>
+    /// 現在区間の到達床を、JSON内のコース順から取得する。
+    /// </summary>
+    const PastSelfTutorialStageBlock* GetClonePlatformCourseGoal() const;
+
+    /// <summary>
+    /// 到達床への接地で記録を消して次区間へ進み、最終区間だけクリアする。
+    /// </summary>
+    void UpdateClonePlatformCourse();
+
+    /// <summary>
+    /// コースの区間とプレイヤーの再挑戦位置を最初へ戻す。
+    /// </summary>
+    void ResetClonePlatformCourse();
+
+    /// <summary>
     /// 選択中のチュートリアルルートに応じたカメラ注視対象を取得する。
     /// </summary>
     Math::Vector3 GetPastSelfTutorialRouteCameraTarget(const PlayerState& playerState) const;
@@ -575,11 +631,6 @@ private:
     /// 選択されたチュートリアルルートに対応するルールを適用する。
     /// </summary>
     void SelectPastSelfTutorialRoute(PastSelfTutorialRoute route);
-
-    /// <summary>
-    /// クリア済みのルートから次のチュートリアルルートへ進む。
-    /// </summary>
-    void AdvancePastSelfTutorialRoute();
 
     /// <summary>
     /// 現在選択中のチュートリアルルート名を取得する。
@@ -710,10 +761,6 @@ private:
     /// シーン内の3Dオブジェクトを更新する。
     /// </summary>
     void UpdateSceneObjects(float deltaTime);
-    /// <summary>
-    /// シーン内3Dオブジェクトの衝突判定を更新する。
-    /// </summary>
-    void UpdateSceneCollisions();
 
     /// <summary>
     /// パーティクル描画用オブジェクトを初期化する
@@ -781,61 +828,6 @@ private:
     void InitializeSkyBox();
 
     /// <summary>
-    /// 3Dオブジェクトの初期設定を適用する。
-    /// </summary>
-    void ApplySceneObjectInitialSettings(MyEngine::Object3d& object3d, const std::string& modelFileName);
-
-    /// <summary>
-    /// 指定したモデルファイル名からシーン用3Dオブジェクトを生成する
-    /// </summary>
-    void CreateSceneObject(const std::string& modelFileName);
-
-    /// <summary>
-    /// レベルデータ内のオブジェクト一覧からシーン用3Dオブジェクトを生成する。
-    /// </summary>
-    void CreateSceneObjectsFromLevelData(const std::vector<MyEngine::LevelObjectData>& objectDataList);
-
-    /// <summary>
-    /// レベルデータ内の1オブジェクトからシーン用3Dオブジェクトを生成する。
-    /// </summary>
-    void CreateSceneObjectFromLevelData(const MyEngine::LevelObjectData& objectData);
-
-    /// <summary>
-    /// 既存のシーン用3DオブジェクトへレベルデータのTransformとColliderを反映する。
-    /// </summary>
-    bool ApplyLevelDataToExistingSceneObjects(const std::vector<MyEngine::LevelObjectData>& objectDataList, size_t& objectIndex);
-
-    /// <summary>
-    /// 現在のシーン用3DオブジェクトのTransformをレベルデータへ書き戻す。
-    /// </summary>
-    bool SyncSceneObjectsToLevelData();
-
-    /// <summary>
-    /// 現在のレベルデータで参照しているモデルを事前読み込みする。
-    /// </summary>
-    bool PreloadLevelModels();
-
-    /// <summary>
-    /// 指定したシーン用3DオブジェクトをLevelDataのルートへ追加する。
-    /// </summary>
-    bool AppendSceneObjectToLevelData(size_t objectIndex);
-
-    /// <summary>
-    /// 指定したシーン用3Dオブジェクトに対応するLevelData内MESHを削除する。
-    /// </summary>
-    bool RemoveSceneObjectFromLevelData(size_t objectIndex);
-
-    /// <summary>
-    /// 既存のシーン用3Dオブジェクトをレベルデータ階層へ順番に書き戻す。
-    /// </summary>
-    bool SyncSceneObjectsToLevelDataRecursive(std::vector<MyEngine::LevelObjectData>& objectDataList, size_t& objectIndex, const Math::Transform& parentTransform);
-
-    /// <summary>
-    /// 指定した番号のシーン用3Dオブジェクトを削除する
-    /// </summary>
-    void DeleteSceneObject(size_t objectIndex);
-
-    /// <summary>
     /// 指定したテクスチャ名からシーン用スプライトを生成する。
     /// </summary>
     void CreateSceneSprite(const std::string& textureName);
@@ -844,62 +836,6 @@ private:
     /// 指定した番号のシーン用スプライトを削除する。
     /// </summary>
     void DeleteSceneSprite(size_t spriteIndex);
-
-    /// <summary>
-    /// シーンで使用する3Dオブジェクトを初期化する。
-    /// </summary>
-    void InitializeSceneObjects();
-
-    /// <summary>
-    /// 現在の3DオブジェクトをクリアしてレベルJSONから作り直す。
-    /// </summary>
-    bool ReloadLevelSceneObjects();
-
-    /// <summary>
-    /// 現在保持しているレベルデータをシーン用3Dオブジェクトへ反映する。
-    /// </summary>
-    bool ApplyLevelDataToScene(bool applyCameraStart = false);
-
-    /// <summary>
-    /// 現在保持しているレベルデータの集計情報を更新する。
-    /// </summary>
-    void RefreshLevelDataSummary();
-
-    /// <summary>
-    /// 現在のレベルデータをJSONスナップショットとして保存する。
-    /// </summary>
-    bool SaveLevelSnapshot();
-
-    /// <summary>
-    /// レベルJSONの読み込み状態を記録する。
-    /// </summary>
-    void SetLevelLoadStatus(bool succeeded, const std::string& message);
-
-    /// <summary>
-    /// レベルJSONの保存状態を記録する。
-    /// </summary>
-    void SetLevelSaveStatus(bool succeeded, const std::string& message);
-
-    /// <summary>
-    /// LevelDataが未保存状態になったことを記録する。
-    /// </summary>
-    void MarkLevelDataDirty(const std::string& message, bool appliedToScene);
-
-    /// <summary>
-    /// MESH順の番号からLevelData内のオブジェクトを取得する。
-    /// </summary>
-    MyEngine::LevelObjectData* FindLevelMeshObjectByIndex(size_t objectIndex);
-
-    /// <summary>
-    /// MESH順の番号からLevelData内のオブジェクトを再帰的に取得する。
-    /// </summary>
-    MyEngine::LevelObjectData* FindLevelMeshObjectByIndexRecursive(std::vector<MyEngine::LevelObjectData>& objectDataList, size_t targetMeshIndex, size_t& currentMeshIndex);
-
-    /// <summary>
-    /// LevelDataの選択コライダーを対応するObject3dへ反映する。
-    /// </summary>
-    void ApplyLevelColliderEditToSceneObject(size_t objectIndex, const MyEngine::LevelObjectData& objectData);
-
 
     /// <summary>
     /// ポストプロセス描画が利用できるか判定する
@@ -974,15 +910,6 @@ private:
     /// シーン内の3D要素を描画する
     /// </summary>
     void DrawSceneContent();
-    /// <summary>
-    /// 登録済みの3Dオブジェクトを描画する。
-    /// </summary>
-    void DrawSceneObjects();
-
-    /// <summary>
-    /// 所有中の3Dオブジェクトから参照用ビューを作り直す。
-    /// </summary>
-    void RebuildObjectPointerView();
 
     /// <summary>
     /// 所有中のスプライトから参照用ビューを作り直す。
@@ -1030,39 +957,20 @@ private:
     void DrawDebugLines2D();
 
 private: // メンバー変数
-    static constexpr bool kUsePostEffectPreviewScene = true; // 確認用の常時発生粒子・通常スプライト・エフェクト開始キーを止める
+    static constexpr bool kEnableLegacyPreview = false; // 旧検証用の常時発生粒子・通常スプライト・補助描画を有効にするか
 
     MyEngine::SceneContext ctx_;
-    MyEngine::LevelData levelData_; // Blenderから読み込んだレベルデータ
-    std::string levelDataFileName_; // 読み込み対象のレベルJSONファイル名
-    std::string levelSaveFileName_; // 読み書き共通化後の保存先確認用レベルJSONファイル名
-    bool levelLoadSucceeded_ = false; // 直近のレベルJSON読み込みが成功したか
-    std::string levelLoadMessage_; // 直近のレベルJSON読み込み状態メッセージ
-    bool levelSaveSucceeded_ = false; // 直近のレベルJSON保存が成功したか
-    std::string levelSaveMessage_; // 直近のレベルJSON保存状態メッセージ
-    bool levelDirty_ = false; // LevelDataに未保存の編集があるか
-    bool levelAppliedToScene_ = false; // 現在のLevelDataがシーンへ反映済みか
-    size_t levelTotalObjectCount_ = 0; // レベルJSONに含まれる総オブジェクト数
-    size_t levelMeshObjectCount_ = 0; // レベルJSONから生成対象になったMesh数
-    size_t levelColliderObjectCount_ = 0; // レベルJSONに含まれる有効コライダー数
-    size_t levelDisabledObjectCount_ = 0; // レベルJSONで無効化されているオブジェクト数
-    size_t levelSpawnPointCount_ = 0; // レベルJSONに含まれるスポーン地点数
-    size_t levelEventTriggerCount_ = 0; // レベルJSONに含まれるイベントトリガー数
-    size_t levelCameraStartCount_ = 0; // レベルJSONに含まれる開始カメラ数
     std::vector<std::unique_ptr<MyEngine::Sprite>> sprites_;
     std::vector<MyEngine::Sprite*> spritePointerView_; // ImGuiなど外部参照用のスプライト一覧
     uint32_t nextSpriteId_ = 1; // 次に生成するスプライトへ割り当てるID
     std::vector<std::unique_ptr<MyEngine::Object3d>> objects3d_;
-    std::vector<MyEngine::Object3d*> objectPointerView_; // ImGuiなど外部参照用の3Dオブジェクト一覧
     uint32_t nextObjectId_ = 1; // 次に生成する3Dオブジェクトへ割り当てるID
-    MyEngine::CollisionSystem collisionSystem_; // シーン内3Dオブジェクトの衝突判定管理
-    size_t lastCollisionPairCount_ = 0; // 直近フレームで衝突していたペア数
     Player player_; // 分身チュートリアルを操作するプレイヤー
     PastSelfTutorialRoute pastSelfTutorialRoute_ = PastSelfTutorialRoute::FinalChallenge; // 現在選択中のチュートリアルルート
     StageRuleSettings pastSelfTutorialStageRules_; // 分身チュートリアルステージへ適用する調整可能なルール
-    LevelEditorImGuiState levelEditorImGuiState_; // このシーンだけの編集履歴と入力状態
     PlaySceneObjectEditorState objectEditorState_; // このシーンだけの表示オブジェクト編集選択
     PastSelfTutorialState pastSelfTutorialState_; // 寿命別に分類したチュートリアルの進行状態
+    ClonePlatformCourseState clonePlatformCourseState_; // 区間内のリセットでも保持するコース進捗
     int lastAutoOpenedStageObjectIndex_ = -1; // ステージ編集で最後に自動展開した選択番号
     PastSelfRecorder pastSelfRecorder_; // 分身用のプレイヤー状態記録
     PastSelfCloneManager pastSelfCloneManager_; // 記録済み状態を再生するチュートリアル用分身の管理クラス
@@ -1074,7 +982,7 @@ private: // メンバー変数
     std::string pastSelfTutorialStageFileMessage_; // 直近の読み書き結果
     bool pastSelfTutorialStageFileSucceeded_ = false; // 直近の読み書きに成功したか
     bool pastSelfTutorialAutoCameraFollow_ = true; // プレイヤーと攻略対象へゲーム用カメラを自動追従させるか
-    BoxSwitchGimmick pastSelfTutorialSwitch_; // 分身専用スイッチギミック
+    BoxSwitchGimmick pastSelfTutorialSwitch_; // プレイヤーと分身が共通で押せる通常スイッチギミック
     LinkedDoorGimmick pastSelfTutorialDoor_; // スイッチ連動扉ギミック
     TimedSwitchGimmick pastSelfTutorialTimedSwitch_; // 時間差スイッチギミック
     LinkedDoorGimmick pastSelfTutorialTimedDoor_; // 時間差スイッチ連動扉ギミック

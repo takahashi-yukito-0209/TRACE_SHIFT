@@ -53,6 +53,11 @@ public:
     void ResolveMovingSolidCollider(const SolidCollider& previousCollider, const SolidCollider& currentCollider);
 
     /// <summary>
+    /// 上面に乗っている場合だけ移動足場へ追従し、横や下からの接触では移動しない。
+    /// </summary>
+    bool ResolveMovingStandablePlatform(const StandablePlatform& previousPlatform, const StandablePlatform& currentPlatform);
+
+    /// <summary>
     /// 外部移動後に生じた全面コライダーとの横方向の重なりを解決する。
     /// </summary>
     void ResolveExternalSolidCollisions(const std::vector<SolidCollider>& solidColliders, const SolidCollider& sourceCollider);

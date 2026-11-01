@@ -11,7 +11,7 @@
             "goal_marker": false,
             "name": "Upper Goal Platform",
             "one_clone_goal_platform": true,
-            "route_mask": 5,
+            "route_mask": 4,
             "transform": {
                 "rotate": [
                     0.0,
@@ -41,7 +41,7 @@
             "goal_marker": false,
             "name": "Left Start Platform",
             "one_clone_goal_platform": false,
-            "route_mask": 5,
+            "route_mask": 4,
             "transform": {
                 "rotate": [
                     0.0,
@@ -71,7 +71,7 @@
             "goal_marker": false,
             "name": "Center Approach Platform",
             "one_clone_goal_platform": false,
-            "route_mask": 7,
+            "route_mask": 6,
             "transform": {
                 "rotate": [
                     0.0,
@@ -356,6 +356,276 @@
                 "translate": [
                     -7.749885559082031,
                     3.325432062149048,
+                    0.0
+                ]
+            }
+        },
+        {
+            "collidable": true,
+            "color": [
+                0.6499999761581421,
+                0.7200000286102295,
+                0.7799999713897705,
+                1.0
+            ],
+            "goal_marker": false,
+            "name": "Course 01 Safety Floor",
+            "one_clone_goal_platform": false,
+            "route_mask": 1,
+            "transform": {
+                "rotate": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    18.0,
+                    0.30000001192092896,
+                    4.0
+                ],
+                "translate": [
+                    -6.0,
+                    -0.15000000596046448,
+                    0.0
+                ]
+            }
+        },
+        {
+            "collidable": true,
+            "color": [
+                1.0,
+                0.7200000286102295,
+                0.30000001192092896,
+                1.0
+            ],
+            "goal_marker": false,
+            "name": "Course 01 Exit",
+            "one_clone_goal_platform": true,
+            "route_mask": 1,
+            "transform": {
+                "rotate": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    4.0,
+                    0.30000001192092896,
+                    4.0
+                ],
+                "translate": [
+                    -1.7999999523162842,
+                    2.5,
+                    0.0
+                ]
+            }
+        },
+        {
+            "collidable": true,
+            "color": [
+                0.6499999761581421,
+                0.7200000286102295,
+                0.7799999713897705,
+                1.0
+            ],
+            "goal_marker": false,
+            "name": "Course 02 Safety Floor",
+            "one_clone_goal_platform": false,
+            "route_mask": 1,
+            "transform": {
+                "rotate": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    18.0,
+                    0.30000001192092896,
+                    4.0
+                ],
+                "translate": [
+                    18.0,
+                    -0.15000000596046448,
+                    0.0
+                ]
+            }
+        },
+        {
+            "collidable": true,
+            "color": [
+                0.41999998688697815,
+                0.6200000047683716,
+                0.7200000286102295,
+                1.0
+            ],
+            "goal_marker": false,
+            "name": "Course 02 Boarding Platform",
+            "one_clone_goal_platform": false,
+            "route_mask": 1,
+            "transform": {
+                "rotate": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    2.0,
+                    0.30000001192092896,
+                    4.0
+                ],
+                "translate": [
+                    13.0,
+                    0.8500000238418579,
+                    0.0
+                ]
+            }
+        },
+        {
+            "collidable": true,
+            "color": [
+                1.0,
+                0.7200000286102295,
+                0.30000001192092896,
+                1.0
+            ],
+            "goal_marker": false,
+            "name": "Course 02 Exit",
+            "one_clone_goal_platform": true,
+            "route_mask": 1,
+            "transform": {
+                "rotate": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    4.0,
+                    0.30000001192092896,
+                    4.0
+                ],
+                "translate": [
+                    22.200000762939453,
+                    2.5,
+                    0.0
+                ]
+            }
+        },
+        {
+            "collidable": true,
+            "color": [
+                0.6499999761581421,
+                0.7200000286102295,
+                0.7799999713897705,
+                1.0
+            ],
+            "goal_marker": false,
+            "name": "Course 03 Safety Floor",
+            "one_clone_goal_platform": false,
+            "route_mask": 1,
+            "transform": {
+                "rotate": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    24.0,
+                    0.30000001192092896,
+                    4.0
+                ],
+                "translate": [
+                    44.0,
+                    -0.15000000596046448,
+                    0.0
+                ]
+            }
+        },
+        {
+            "collidable": true,
+            "color": [
+                0.41999998688697815,
+                0.6200000047683716,
+                0.7200000286102295,
+                1.0
+            ],
+            "goal_marker": false,
+            "name": "Course 03 Boarding Platform",
+            "one_clone_goal_platform": false,
+            "route_mask": 1,
+            "transform": {
+                "rotate": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    2.0,
+                    0.30000001192092896,
+                    4.0
+                ],
+                "translate": [
+                    37.0,
+                    0.8500000238418579,
+                    0.0
+                ]
+            }
+        },
+        {
+            "collidable": true,
+            "color": [
+                0.47999998927116394,
+                0.5799999833106995,
+                0.6800000071525574,
+                1.0
+            ],
+            "goal_marker": false,
+            "name": "Course 03 Bypass Roof",
+            "one_clone_goal_platform": false,
+            "route_mask": 1,
+            "transform": {
+                "rotate": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    3.5,
+                    0.30000001192092896,
+                    4.0
+                ],
+                "translate": [
+                    42.75,
+                    1.399999976158142,
+                    0.0
+                ]
+            }
+        },
+        {
+            "collidable": true,
+            "color": [
+                1.0,
+                0.7200000286102295,
+                0.30000001192092896,
+                1.0
+            ],
+            "goal_marker": false,
+            "name": "Course 03 Exit",
+            "one_clone_goal_platform": true,
+            "route_mask": 1,
+            "transform": {
+                "rotate": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    4.0,
+                    0.30000001192092896,
+                    4.0
+                ],
+                "translate": [
+                    50.0,
+                    2.5,
                     0.0
                 ]
             }

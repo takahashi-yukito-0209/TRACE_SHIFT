@@ -34,7 +34,8 @@ public: // メンバ構造体
         Math::Matrix4x4 uvTransform;
         int lightingMode;
         int32_t useAlphaCutoutSampler;
-        float padding2[2];
+        int32_t useAlphaDiscard; // HLSLと配置を合わせる未使用のアルファ破棄設定
+        int32_t useTexture; // 画像を参照するか、マテリアル色だけで描画するか
         float shininess;
         float pad3[3];
     };
@@ -50,6 +51,11 @@ public: // メンバ関数
     /// スプライト描画に必要なリソースを生成し、初期テクスチャを設定する
     /// </summary>
     void Initialize(SpriteCommon* spriteCommon, std::string textureFilePath, class ImGuiManager* imguiManager = nullptr);
+
+    /// <summary>
+    /// 画像を読み込まず、単色矩形の描画リソースを生成する。
+    /// </summary>
+    void InitializeSolidColor(SpriteCommon* spriteCommon, class SrvManager* srvManager);
 
     /// <summary>
     /// スプライトの頂点、UV、変換行列を更新する
@@ -233,6 +239,8 @@ private: // メンバ変数
     uint32_t spriteId_ = 0; // シーン内で安定して識別するためのID
     uint32_t textureIndex_ = 0; // 使用するテクスチャのSRVインデックス
     std::string textureFilePath_; // ImGuiで識別するためのテクスチャ名
+    class SrvManager* solidColorSrvManager_ = nullptr; // 単色描画用のnull SRVを管理する参照
+    uint32_t solidColorSrvIndex_ = UINT32_MAX; // 画像リソースを持たないnull SRVの番号
 
     // スプライトの変換情報
     Math::Transform transform_ = {};

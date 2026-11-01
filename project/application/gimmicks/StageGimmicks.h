@@ -25,8 +25,7 @@ struct BoxSwitchGimmickDesc {
     Math::Vector3 volumeCenter { 0.0f, 0.0f, 0.0f }; // 入力判定範囲の中心
     Math::Vector3 volumeHalfSize { 0.5f, 0.5f, 0.5f }; // 入力判定範囲の半サイズ
     Math::Vector4 inactiveColor { 0.18f, 0.18f, 0.22f, 1.0f }; // 未入力時の表示色
-    Math::Vector4 activeColor { 0.0f, 1.0f, 0.45f, 1.0f }; // 分身入力時の表示色
-    Math::Vector4 playerOnlyColor { 1.0f, 0.62f, 0.12f, 1.0f }; // プレイヤーだけが乗った時の表示色
+    Math::Vector4 activeColor { 0.0f, 1.0f, 0.45f, 1.0f }; // プレイヤーまたは分身が乗った時の表示色
 };
 
 /// <summary>
@@ -71,8 +70,9 @@ struct WeightSwitchGimmickDesc {
     Math::Vector3 volumeCenter { 0.0f, 0.0f, 0.0f }; // 入力判定範囲の中心
     Math::Vector3 volumeHalfSize { 0.5f, 0.5f, 0.5f }; // 入力判定範囲の半サイズ
     Math::Vector4 inactiveColor { 0.18f, 0.18f, 0.22f, 1.0f }; // 未入力時の表示色
-    Math::Vector4 partialColor { 1.0f, 0.62f, 0.12f, 1.0f }; // 片方だけが乗った時の表示色
-    Math::Vector4 activeColor { 0.65f, 1.0f, 0.1f, 1.0f }; // 両方が乗った時の表示色
+    Math::Vector4 partialColor { 1.0f, 0.62f, 0.12f, 1.0f }; // 重量が必要重量に足りない時の表示色
+    Math::Vector4 activeColor { 0.65f, 1.0f, 0.1f, 1.0f }; // 必要重量を満たした時の表示色
+    float requiredWeight = 2.0f; // 作動に必要な合計重量。本体と各分身はそれぞれ重量1
 };
 
 /// <summary>
@@ -212,8 +212,7 @@ private:
     Math::Vector3 volumeHalfSize_ { 0.5f, 0.5f, 0.5f }; // スイッチ判定範囲の半サイズ
     SwitchVolumeBasis editorBasis_; // 編集同期に使う変更されない初期表示と判定範囲
     Math::Vector4 inactiveColor_ { 0.18f, 0.18f, 0.22f, 1.0f }; // 未入力時の表示色
-    Math::Vector4 activeColor_ { 0.0f, 1.0f, 0.45f, 1.0f }; // 分身入力時の表示色
-    Math::Vector4 playerOnlyColor_ { 1.0f, 0.62f, 0.12f, 1.0f }; // プレイヤーだけが乗った時の表示色
+    Math::Vector4 activeColor_ { 0.0f, 1.0f, 0.45f, 1.0f }; // プレイヤーまたは分身が乗った時の表示色
     bool active_ = false; // スイッチがギミックとして有効か
     bool playerOnSwitch_ = false; // プレイヤーが判定内にいるか
     bool cloneOnSwitch_ = false; // 分身が判定内にいるか
@@ -381,12 +380,12 @@ private:
 };
 
 /// <summary>
-/// プレイヤーと分身が同時に乗った時だけ起動する重さスイッチギミックを管理するクラス
+/// 本体と可視分身の合計重量が必要重量以上で起動する重さスイッチギミックを管理するクラス
 /// </summary>
 class WeightSwitchGimmick {
 public:
     /// <summary>
-    /// 重さスイッチの表示、判定範囲、色を初期化する。
+    /// 重さスイッチの表示、判定範囲、色、必要重量を初期化する。
     /// </summary>
     void Initialize(MyEngine::Object3dCommon* object3dCommon, MyEngine::ImGuiManager* imguiManager, const WeightSwitchGimmickDesc& desc);
 
@@ -396,7 +395,7 @@ public:
     void Finalize();
 
     /// <summary>
-    /// プレイヤーと可視分身の位置からスイッチ状態を更新する。
+    /// 本体と可視分身の合計重量からスイッチ状態を更新する。
     /// </summary>
     void Update(const PlayerState& playerState, std::span<const PlayerState> cloneStates);
 
@@ -414,6 +413,21 @@ public:
     /// 重さスイッチ状態を初期状態へ戻す。
     /// </summary>
     void Reset();
+
+    /// <summary>
+    /// 正の有限値だけを必要重量として設定し、現在の作動状態へ反映する。
+    /// </summary>
+    bool SetRequiredWeight(float requiredWeight);
+
+    /// <summary>
+    /// スイッチを作動させるために必要な合計重量を取得する。
+    /// </summary>
+    float GetRequiredWeight() const { return requiredWeight_; }
+
+    /// <summary>
+    /// 判定内にいる本体と可視分身の合計重量を取得する。
+    /// </summary>
+    float GetCurrentWeight() const { return currentWeight_; }
 
     /// <summary>
     /// スイッチが起動中か取得する。
@@ -456,8 +470,10 @@ private:
     Math::Vector3 volumeHalfSize_ { 0.5f, 0.5f, 0.5f }; // スイッチ判定範囲の半サイズ
     SwitchVolumeBasis editorBasis_; // 編集同期に使う変更されない初期表示と判定範囲
     Math::Vector4 inactiveColor_ { 0.18f, 0.18f, 0.22f, 1.0f }; // 未入力時の表示色
-    Math::Vector4 partialColor_ { 1.0f, 0.62f, 0.12f, 1.0f }; // 片方だけが乗った時の表示色
-    Math::Vector4 activeColor_ { 0.65f, 1.0f, 0.1f, 1.0f }; // 両方が乗った時の表示色
+    Math::Vector4 partialColor_ { 1.0f, 0.62f, 0.12f, 1.0f }; // 重量が必要重量に足りない時の表示色
+    Math::Vector4 activeColor_ { 0.65f, 1.0f, 0.1f, 1.0f }; // 必要重量を満たした時の表示色
+    float requiredWeight_ = 2.0f; // 作動に必要な合計重量。リセット後も保持する設定値
+    float currentWeight_ = 0.0f; // 本体と可視分身から計算した現在の合計重量
     bool active_ = false; // スイッチがギミックとして有効か
     bool playerOnSwitch_ = false; // プレイヤーが判定内にいるか
     bool cloneOnSwitch_ = false; // 分身が判定内にいるか
