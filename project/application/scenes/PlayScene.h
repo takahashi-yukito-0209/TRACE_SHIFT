@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -163,11 +164,22 @@ private:
     std::unique_ptr<MyEngine::Sprite> stageIntroSprite_; // ステージ開始時に短く表示する番号とテーマ
     std::unique_ptr<MyEngine::Sprite> stageOverlayBackground_; // 開始文字の背景となる上部の帯
     StageStartSequenceState stageStartSequence_; // 表示・音・光・操作解禁で共有する演出時間
-    StageFailureSequenceState stageFailureSequence_; // 落下の消失・暗転・復帰の演出時間
+    StageFailureSequenceState stageFailureSequence_; // 失敗時の明滅・暗転・復帰の演出時間
     std::unique_ptr<MyEngine::Sprite> stageFailureDim_; // 画面外の落下でも失敗を伝える暗幕
     std::shared_ptr<MyEngine::SoundClip> stageFailureSound_; // 開始音と同じ系統の短い下降音
     std::unique_ptr<MyEngine::Object3d> stageStartRing_; // 操作解禁時に足元へ広がる表示専用リング
-    std::unique_ptr<MyEngine::Object3d> stageStartBody_; // 出現中だけ本体に代えて表示する実体化用モデル
+    std::optional<size_t> stageFailureHazardBlockIndex_; // 今回の失敗で発光させる危険エリアの番号
+    float stageFailureRecoilSide_ = -1.0f; // 表示用の本体がのけぞる横方向（左が負、右が正）
+    float stageFailureFallVelocity_ = 0.0f; // 失敗確定直前から引き継ぐ表示用の落下速度
+    bool useQuickFailurePresentation_ = true; // 次の失敗から約1秒の軽い演出を使うか
+    bool useFailureImpactFeedback_ = true; // 次の接触失敗で火花とカメラ反応を使うか
+    bool useFailureCameraShake_ = true; // 次の接触失敗で弱いカメラ振動を使うか
+    bool stageFailureImpactEnabled_ = false; // 今回の失敗で追加の接触演出を再生するか
+    bool stageFailureCameraShakeEnabled_ = false; // 演出開始時に固定するカメラ振動の設定
+    Math::Vector3 stageFailureContactPoint_ {}; // 危険エリア表面に置く接触火花の中心
+    Math::Vector3 stageFailureCameraOrigin_ {}; // カメラ振動を加える前の位置
+    std::array<std::unique_ptr<MyEngine::Object3d>, 4> stageFailureSparks_; // 接触箇所から短く散る表示専用の火花
+    std::unique_ptr<MyEngine::Object3d> stageStartBody_; // 出現・失敗中だけ本体に代える表示専用モデル
     std::unique_ptr<MyEngine::Sprite> stageStartDim_; // 出現開始から通常の明るさへ戻す画面の薄暗幕
     std::shared_ptr<MyEngine::SoundClip> stageStartSound_; // 全体音量設定に従う短い開始音
     Math::Vector3 stageStartOrigin_ {}; // 開始時点の足元に固定するリング位置
@@ -193,14 +205,29 @@ private:
     void UpdateStageStartPresentationVisuals();
 
     /// <summary>
-    /// 落下地点で進行を止め、失敗音と消失演出を開始する。
+    /// 失敗原因に応じて進行を止め、接触反応または落下後の暗転を開始する。
     /// </summary>
-    void BeginStageFailurePresentation();
+    void BeginStageFailurePresentation(StageFailureSequenceState::Cause cause = StageFailureSequenceState::Cause::Contact);
 
     /// <summary>
     /// 暗転中に現在区間へ復帰し、短い開始演出と明転を進める。
     /// </summary>
     void UpdateStageFailurePresentation(float deltaTime);
+
+    /// <summary>
+    /// 当たり判定を変えず、通常色の本体に接触時ののけぞりか落下時の姿勢崩れを表示する。
+    /// </summary>
+    void UpdateStageFailureBodyVisuals(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix);
+
+    /// <summary>
+    /// 接触時に一度だけカメラを小さく揺らし、元の位置へ戻す。
+    /// </summary>
+    void UpdateStageFailureCamera();
+
+    /// <summary>
+    /// 失敗の静止時間内だけ接触箇所の小さな火花を更新する。
+    /// </summary>
+    void UpdateStageFailureSparks(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix);
 
     /// <summary>
     /// 提出用の到達判定を検出し、クリア履歴を記録せずタイトルへ戻す。

@@ -232,11 +232,16 @@ void PlayScene::ReleaseSceneObjects()
     stageIntroSprite_.reset();
     stageOverlayBackground_.reset();
     stageStartRing_.reset();
+    for (auto& spark : stageFailureSparks_) { // 接触火花の表示リソース
+        spark.reset();
+    }
+    stageFailureImpactEnabled_ = false;
     stageStartBody_.reset();
     stageStartDim_.reset();
     stageStartSound_.reset();
     stageStartSequence_ = {};
     stageFailureSequence_ = {};
+    stageFailureHazardBlockIndex_.reset();
     stageFailureDim_.reset();
     stageFailureSound_.reset();
     sprites_.clear();

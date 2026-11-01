@@ -142,6 +142,11 @@ void PlayScene::DrawPastSelfTutorialStageEditorImGui()
     }
 
     EditStringText("Stage File", pastSelfTutorialStageFileName_);
+    ImGui::Checkbox("Quick Failure (1.0s)", &useQuickFailurePresentation_);
+    ImGui::TextDisabled("ON: light hit / 1.0s  OFF: detailed hit / 1.5s (next failure)");
+    ImGui::Checkbox("Impact Feedback (trial)", &useFailureImpactFeedback_);
+    ImGui::Checkbox("Impact Camera Shake", &useFailureCameraShake_);
+    ImGui::TextDisabled("Impact options apply on the next hazard contact.");
     if (ImGui::Button("Load Hazard Trial")) {
         pastSelfTutorialStageFileName_ = "levels/trace_shift_hazard_trial.json";
         if (ReloadPastSelfTutorialStage()) {

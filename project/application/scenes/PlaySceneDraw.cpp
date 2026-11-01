@@ -244,6 +244,18 @@ void PlayScene::DrawWorldAndParticles()
     if (ctx_.object3dCommon) {
         ctx_.object3dCommon->SetCommonDrawSetting();
         DrawPastSelfTutorial();
+        if (stageFailureImpactEnabled_ && stageFailureSequence_.GetImpactStrength() > 0.0f) {
+            const BlendMode previousBlend = ctx_.object3dCommon->GetBlendMode(); // 火花を描く前の合成設定
+            ctx_.object3dCommon->SetBlendMode(BlendMode::Add);
+            ctx_.object3dCommon->SetCommonDrawSetting();
+            for (auto& spark : stageFailureSparks_) { // 接触箇所にだけ描く小さな火花
+                if (spark) {
+                    spark->Draw();
+                }
+            }
+            ctx_.object3dCommon->SetBlendMode(previousBlend);
+            ctx_.object3dCommon->SetCommonDrawSetting();
+        }
         if (stageStartRing_ && (stageStartSequence_.IsHolding() || stageStartSequence_.IsPulseVisible())) {
             const BlendMode previousBlend = ctx_.object3dCommon->GetBlendMode(); // 開始リングより前の合成設定
             ctx_.object3dCommon->SetBlendMode(BlendMode::Add);
@@ -347,6 +359,19 @@ void PlayScene::InitializeStageSelectionOverlay()
         stageStartRing_->SetUseAlphaDiscard(false);
         stageStartRing_->SetRotate({ 1.57079633f, 0.0f, 0.0f });
     }
+    if (ctx_.object3dCommon) {
+        for (auto& spark : stageFailureSparks_) { // 開始表示の再設定でも作り直さない火花
+            if (spark) {
+                continue;
+            }
+            spark = std::make_unique<Object3d>();
+            spark->Initialize(ctx_.object3dCommon, ctx_.imguiManager);
+            spark->SetModel("block/block.obj");
+            spark->SetUseTexture(false);
+            spark->SetEnableLighting(false);
+            spark->SetUseAlphaDiscard(false);
+        }
+    }
     if (!stageStartSound_ && ctx_.soundSystem && ctx_.soundSystem->IsReady()) {
         stageStartSound_ = ctx_.soundSystem->LoadFromFile("sounds/se/stage_start.wav");
     }
@@ -397,7 +422,8 @@ void PlayScene::UpdateStageStartPresentationVisuals()
     stageStartRing_->SetScale({ scale, scale, scale });
     stageStartRing_->SetMaterialColor({ 0.35f, 0.9f, 1.0f, alpha });
     stageStartRing_->Update(ctx_.camera->GetViewMatrix(), ctx_.camera->GetProjectionMatrix());
-    if ((!stageStartSequence_.IsArrivalVisible() && !stageFailureSequence_.IsActive()) || !stageStartBody_) {
+    const bool recovering = stageFailureSequence_.IsActive() && stageFailureSequence_.HasRespawned(); // 失敗後の復帰地点で実体化しているか
+    if ((!stageStartSequence_.IsArrivalVisible() && !recovering) || !stageStartBody_) {
         return;
     }
     const PlayerState& state = player_.GetState(); // ゲーム状態を変えず表示だけに使う本体姿勢
@@ -406,20 +432,29 @@ void PlayScene::UpdateStageStartPresentationVisuals()
     stageStartBody_->SetTranslate(state.transform.translate);
     stageStartBody_->SetRotate(state.transform.rotate);
     stageStartBody_->SetScale(state.transform.scale);
-    const float bodyAlpha = stageFailureSequence_.IsActive() ? stageFailureSequence_.GetBodyAlpha() : 0.12f + 0.88f * eased; // 開始の実体化または失敗の消失・復帰に使う透明度
+    const float bodyAlpha = recovering ? 1.0f - stageFailureSequence_.GetDimAlpha() : 0.12f + 0.88f * eased; // 初回開始または復帰地点だけで実体化する透明度
     stageStartBody_->SetMaterialColor({ 0.0f, 0.86f, 1.0f, bodyAlpha });
     stageStartBody_->Update(ctx_.camera->GetViewMatrix(), ctx_.camera->GetProjectionMatrix());
 }
 
 /// <summary>
-/// 落下地点で進行を止め、失敗音と消失演出を開始する。
+/// 失敗原因に応じて進行を止め、接触反応または落下後の暗転を開始する。
 /// </summary>
-void PlayScene::BeginStageFailurePresentation()
+void PlayScene::BeginStageFailurePresentation(StageFailureSequenceState::Cause cause)
 {
     if (stageFailureSequence_.IsActive()) {
         return;
     }
-    stageFailureSequence_.Begin();
+    stageFailureSequence_.Begin(useQuickFailurePresentation_, cause);
+    stageFailureFallVelocity_ = cause == StageFailureSequenceState::Cause::Fall
+        ? (std::min)(player_.GetVerticalVelocity(), -1.0f) : 0.0f;
+    stageFailureImpactEnabled_ = false;
+    stageFailureCameraShakeEnabled_ = useFailureCameraShake_;
+    if (ctx_.camera) {
+        stageFailureCameraOrigin_ = ctx_.camera->GetTranslate();
+    }
+    stageFailureRecoilSide_ = -1.0f;
+    stageFailureHazardBlockIndex_.reset();
     stageStartSequence_ = {};
     if (ctx_.soundSystem && stageFailureSound_) {
         ctx_.soundSystem->Play(stageFailureSound_);
@@ -441,6 +476,52 @@ void PlayScene::UpdateStageFailurePresentation(float deltaTime)
     UpdateSceneObjects(0.0f);
     if (auto* particleManager = ParticleManager::GetInstance()) { // 失敗演出中の描画に停止時間を渡す管理クラス
         particleManager->Update(0.0f);
+    }
+}
+
+/// <summary>
+/// 接触時に一度だけカメラを小さく揺らし、元の位置へ戻す。
+/// </summary>
+void PlayScene::UpdateStageFailureCamera()
+{
+    if (!ctx_.camera || !stageFailureImpactEnabled_ || !stageFailureCameraShakeEnabled_
+        || !stageFailureSequence_.IsActive() || stageFailureSequence_.HasRespawned()) {
+        return;
+    }
+    const float kick = stageFailureSequence_.GetCameraKickStrength(); // 接触直後だけ一往復して減衰する係数
+    Math::Vector3 position = stageFailureCameraOrigin_; // 毎回元位置から計算して揺れを蓄積しない中心
+    position.x -= stageFailureRecoilSide_ * 0.04f * kick;
+    position.y += 0.015f * kick;
+    ctx_.camera->SetTranslate(position);
+    ctx_.camera->Update();
+}
+
+/// <summary>
+/// 失敗の静止時間内だけ接触箇所の小さな火花を更新する。
+/// </summary>
+void PlayScene::UpdateStageFailureSparks(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix)
+{
+    if (!stageFailureImpactEnabled_ || stageFailureSequence_.GetImpactStrength() <= 0.0f) {
+        return;
+    }
+    constexpr std::array<Math::Vector3, 4> kDirections {
+        Math::Vector3 { 1.0f, 0.7f, 0.0f }, { 0.5f, 1.2f, 0.0f },
+        { 1.1f, -0.4f, 0.0f }, { 0.3f, -1.0f, 0.0f },
+    }; // 危険エリアから離れる側へ短く散る方向
+    const float strength = stageFailureSequence_.GetImpactStrength(); // 本体の静止と同期する火花の強さ
+    const float progress = 1.0f - strength; // 火花が接触箇所から離れる進行率
+    for (size_t index = 0; index < stageFailureSparks_.size(); ++index) { // 接触火花の配置番号
+        auto& spark = stageFailureSparks_[index]; // 更新対象の細い光
+        if (!spark) {
+            continue;
+        }
+        Math::Vector3 direction = kDirections[index]; // 接触した側に合わせて左右反転する方向
+        direction.x *= stageFailureRecoilSide_;
+        spark->SetTranslate(stageFailureContactPoint_ + direction * (0.04f + 0.22f * progress));
+        spark->SetRotate({ 0.0f, 0.0f, std::atan2(direction.y, direction.x) });
+        spark->SetScale({ 0.08f * (1.0f - 0.6f * progress), 0.018f, 0.018f });
+        spark->SetMaterialColor({ 1.0f, 0.95f, 0.85f, strength * strength });
+        spark->Update(viewMatrix, projectionMatrix);
     }
 }
 

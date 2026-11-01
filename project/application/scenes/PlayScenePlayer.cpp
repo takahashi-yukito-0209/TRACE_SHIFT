@@ -1023,6 +1023,8 @@ void PlayScene::ResetPastSelfTutorialReplayState(bool registerPrepareAction)
 /// </summary>
 void PlayScene::ResetPastSelfTutorialMechanics()
 {
+    stageFailureHazardBlockIndex_.reset();
+    stageFailureImpactEnabled_ = false;
     pastSelfTutorialGoal_.Reset();
     pastSelfTutorialSwitch_.Reset();
     pastSelfTutorialDoor_.Reset();
@@ -1297,6 +1299,18 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
                 * (1.0f - hazardContactFraction); // 接触後に進んだ分だけ戻す補正量
             player_.ApplyExternalTranslation(correction);
             BeginStageFailurePresentation();
+            stageFailureHazardBlockIndex_ = hazardBlockIndex;
+            stageFailureRecoilSide_ = player_.GetState().transform.translate.x
+                < pastSelfTutorialStageBlocks_[hazardBlockIndex].collider.center.x ? -1.0f : 1.0f;
+            const SolidCollider& area = pastSelfTutorialStageBlocks_[hazardBlockIndex].collider; // 接触した危険エリアの表面
+            const Math::Vector3 center = player_.GetState().transform.translate; // 接触位置へ補正済みの本体中心
+            const Math::Vector3 halfSize = CalculatePlayerStateHalfSize(player_.GetState()); // 本体の手前側を求める半サイズ
+            stageFailureContactPoint_ = {
+                std::clamp(center.x, area.center.x - area.halfSize.x, area.center.x + area.halfSize.x),
+                std::clamp(center.y, area.center.y - area.halfSize.y, area.center.y + area.halfSize.y),
+                (std::min)(center.z - halfSize.z, area.center.z - area.halfSize.z) - 0.03f,
+            };
+            stageFailureImpactEnabled_ = useFailureImpactFeedback_;
             UpdatePastSelfTutorialVisuals();
             return;
         }
@@ -1320,7 +1334,7 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
             RegisterPastSelfTutorialCheckCompleted("Player used a clone as a platform");
         }
         if (player_.GetState().transform.translate.y < kPastSelfTutorialFallResetY) {
-            BeginStageFailurePresentation();
+            BeginStageFailurePresentation(StageFailureSequenceState::Cause::Fall);
             UpdatePastSelfTutorialVisuals();
             return;
         }
@@ -1342,9 +1356,17 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
     }
 
     if (pastSelfTutorialAutoCameraFollow_) {
-        const std::vector<PlayerState> visibleCloneStates = pastSelfCloneManager_.GetVisibleStates(); // カメラ範囲に含める可視分身状態一覧
+        std::vector<PlayerState> visibleCloneStates = pastSelfCloneManager_.GetVisibleStates(); // カメラ範囲に含める可視分身状態一覧
+        PlayerState cameraPlayerState = player_.GetState(); // 描画対象の位置を変えないカメラ計算専用の本体状態
+        if (HasHazardAreasForCurrentRoute()) {
+            constexpr float kFallCameraMinimumY = -2.0f; // 通路を残しつつ失敗確定時の本体も見せる注視対象の下限
+            cameraPlayerState.transform.translate.y = (std::max)(cameraPlayerState.transform.translate.y, kFallCameraMinimumY);
+            for (auto& cloneState : visibleCloneStates) { // 深い落下を追わないカメラ計算専用の分身状態
+                cloneState.transform.translate.y = (std::max)(cloneState.transform.translate.y, kFallCameraMinimumY);
+            }
+        }
         const PastSelfTutorialCameraFrame targetCameraFrame = CalculatePastSelfTutorialCameraFrame(
-            player_.GetState(), visibleCloneStates, GetPastSelfTutorialRouteCameraTarget(player_.GetState())); // 現在の攻略対象を収める目標カメラ範囲
+            cameraPlayerState, visibleCloneStates, GetPastSelfTutorialRouteCameraTarget(player_.GetState())); // 現在の攻略対象を収める目標カメラ範囲
         pastSelfTutorialCameraFocus_.x = FollowPastSelfTutorialCameraValue(pastSelfTutorialCameraFocus_.x, targetCameraFrame.focus.x, deltaTime);
         pastSelfTutorialCameraFocus_.y = FollowPastSelfTutorialCameraValue(pastSelfTutorialCameraFocus_.y, targetCameraFrame.focus.y, deltaTime);
         pastSelfTutorialCameraFocus_.z = FollowPastSelfTutorialCameraValue(pastSelfTutorialCameraFocus_.z, targetCameraFrame.focus.z, deltaTime);
@@ -1369,6 +1391,7 @@ void PlayScene::UpdatePastSelfTutorialVisuals()
         ConfigurePastSelfTutorialCamera(ctx_.camera, pastSelfTutorialCameraFocus_, presentationDistance);
     }
 
+    UpdateStageFailureCamera();
     const Math::Matrix4x4 viewMatrix = ctx_.camera->GetViewMatrix(); // プレイヤー更新に使用するビュー行列
     const Math::Matrix4x4 projectionMatrix = ctx_.camera->GetProjectionMatrix(); // プレイヤー更新に使用する射影行列
     UpdatePastSelfTutorialStage(viewMatrix, projectionMatrix);
@@ -1377,6 +1400,46 @@ void PlayScene::UpdatePastSelfTutorialVisuals()
     player_.UpdateObject(viewMatrix, projectionMatrix);
     pastSelfCloneManager_.UpdateObjects(viewMatrix, projectionMatrix);
     UpdateStageStartPresentationVisuals();
+    UpdateStageFailureBodyVisuals(viewMatrix, projectionMatrix);
+    UpdateStageFailureSparks(viewMatrix, projectionMatrix);
+}
+
+/// <summary>
+/// 当たり判定を変えず、通常色の本体に接触時ののけぞりか落下時の姿勢崩れを表示する。
+/// </summary>
+void PlayScene::UpdateStageFailureBodyVisuals(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix)
+{
+    if (!stageFailureSequence_.IsActive() || stageFailureSequence_.HasRespawned() || !stageStartBody_) {
+        return;
+    }
+    const PlayerState& state = player_.GetState(); // 失敗地点に固定された判定側の本体状態
+    Math::Vector3 position = state.transform.translate; // 判定位置を変えない表示専用の中心
+    Math::Vector3 rotation = state.transform.rotate; // 元の姿勢へ失敗時の傾きを加えた表示角度
+    if (stageFailureSequence_.IsFall()) {
+        constexpr float kFallVisualHalfGravity = 9.0f; // 表示だけの落下加速度の半分
+        constexpr float kFallVisualTiltAngle = 0.28f; // 落ち抜ける際に姿勢を崩す角度
+        const float time = stageFailureSequence_.GetFallMotionSeconds(); // 暗転中も継続する表示だけの落下時間
+        const float progress = stageFailureSequence_.GetFallReactionProgress(); // 暗転前に姿勢を崩す進行率
+        position.y += stageFailureFallVelocity_ * time - kFallVisualHalfGravity * time * time;
+        rotation.z += kFallVisualTiltAngle * (1.0f - (1.0f - progress) * (1.0f - progress));
+    } else {
+        const float progress = stageFailureSequence_.GetRecoilProgress(); // 静止後の表示用のけぞりの進行率
+        const float eased = 1.0f - (1.0f - progress) * (1.0f - progress); // 動き出しを速くして終端で落ち着かせる補間率
+        const float tilt = -stageFailureRecoilSide_ * stageFailureSequence_.GetTiming().recoilAngle * eased; // のけぞる方向へ姿勢を崩す回転角
+        const float lift = (std::fabs(state.transform.scale.x) * std::fabs(std::sin(tilt))
+            + std::fabs(state.transform.scale.y) * (std::fabs(std::cos(tilt)) - 1.0f)) * 0.5f; // 傾いた本体の下端が床へ沈まない高さ補正
+        position.x += stageFailureRecoilSide_ * stageFailureSequence_.GetTiming().recoilDistance * eased;
+        position.y += (std::max)(lift, 0.0f) + stageFailureSequence_.GetTiming().recoilDistance * 0.23f * std::sin(progress * 3.14159265f);
+        rotation.z += tilt;
+    }
+    const float brightness = stageFailureSequence_.GetHitBrightness(); // 静止中だけ通常色を暗く明滅させる明るさ
+    stageStartBody_->SetTranslate(position);
+    stageStartBody_->SetRotate(rotation);
+    stageStartBody_->SetScale(state.transform.scale);
+    stageStartBody_->SetMaterialColor({ kPastSelfTutorialNormalPlayerColor.x * brightness,
+        kPastSelfTutorialNormalPlayerColor.y * brightness, kPastSelfTutorialNormalPlayerColor.z * brightness,
+        kPastSelfTutorialNormalPlayerColor.w });
+    stageStartBody_->Update(viewMatrix, projectionMatrix);
 }
 
 /// <summary>
@@ -1415,8 +1478,10 @@ void PlayScene::UpdatePastSelfTutorialStage(const Math::Matrix4x4& viewMatrix, c
                 }
                 stageBlock.object->SetMaterialColor(goalColor);
             } else if (stageBlock.hazard) {
+                const float impact = stageFailureHazardBlockIndex_ == blockIndex
+                    ? stageFailureSequence_.GetImpactStrength() : 0.0f; // 接触したエリアだけ本体と同時に発光する強さ
                 stageBlock.object->SetMaterialColor(HazardAreaUtility::CalculateColor(stageBlock.baseColor,
-                    pastSelfTutorialState_.gimmicks.switchActive, pastSelfTutorialState_.progress.elapsedTime));
+                    pastSelfTutorialState_.gimmicks.switchActive, pastSelfTutorialState_.progress.elapsedTime, impact));
             }
             stageBlock.object->Update(viewMatrix, projectionMatrix);
         }
