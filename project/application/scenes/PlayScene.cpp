@@ -198,13 +198,15 @@ void PlayScene::Initialize(const SceneContext& ctx)
 
     LoadSceneTextures();
     InitializeSkyBox();
+    if (stageSelection_) {
+        stageSelection_->selectedStageIndex = (std::min)(stageSelection_->selectedStageIndex, GameApp::kSelectableStageCount - 1);
+        pastSelfTutorialStageFileName_ = GameApp::kSelectableStages[stageSelection_->selectedStageIndex].fileName;
+    }
     InitializePastSelfTutorial();
     if (stageSelection_) {
-        const std::array<PastSelfTutorialRoute, GameApp::kSelectableStageCount> routes {
-            PastSelfTutorialRoute::OneCloneBasics, PastSelfTutorialRoute::TwoCloneCooperation, PastSelfTutorialRoute::FinalChallenge
-        }; // 選択画面の項目と既存ルートの対応
-        stageSelection_->selectedStageIndex = (std::min)(stageSelection_->selectedStageIndex, routes.size() - 1);
-        SelectPastSelfTutorialRoute(routes[stageSelection_->selectedStageIndex]);
+        const uint32_t routeMask = GameApp::kSelectableStages[stageSelection_->selectedStageIndex].routeMask; // 選択した配置内の使用ルート
+        SelectPastSelfTutorialRoute(routeMask == 1u ? PastSelfTutorialRoute::OneCloneBasics
+            : routeMask == 2u ? PastSelfTutorialRoute::TwoCloneCooperation : PastSelfTutorialRoute::FinalChallenge);
     }
     InitializeParticleObjects();
     if (kEnableLegacyPreview) {

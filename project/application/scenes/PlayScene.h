@@ -235,6 +235,11 @@ private:
     bool HandleStageCompletion();
 
     /// <summary>
+    /// 現在の配置ファイルとルートでゴール・クリアを有効にするか確認する。
+    /// </summary>
+    bool IsPastSelfTutorialCompletionEnabled() const;
+
+    /// <summary>
     /// 選択中ルートに危険エリアが配置されているか確認する。
     /// </summary>
     bool HasHazardAreasForCurrentRoute() const;

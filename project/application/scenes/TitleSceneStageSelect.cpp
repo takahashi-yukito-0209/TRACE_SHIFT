@@ -36,7 +36,7 @@ constexpr float kStageFeedbackPi = 3.14159265359f; // 一度だけ滑らかに�
 /// </summary>
 float GetStageSelectItemY(size_t item)
 {
-    return item < GameApp::kSelectableStageCount ? 0.34f + static_cast<float>(item) * 0.13f : 0.84f;
+    return item < GameApp::kSelectableStageCount ? 0.34f + static_cast<float>(item) * 0.11f : 0.84f;
 }
 
 /// <summary>
@@ -62,9 +62,12 @@ D3D12_VIEWPORT GetStagePreviewViewport(float width, float height)
 bool IsPreviewGimmickEnabled(size_t stageIndex, const std::string& id)
 {
     if (stageIndex == 0) {
+        return id == "clone_switch";
+    }
+    if (GameApp::kSelectableStages[stageIndex].routeMask == 1u) {
         return false;
     }
-    if (stageIndex == 1) {
+    if (GameApp::kSelectableStages[stageIndex].routeMask == 2u) {
         return id == "clone_switch" || id == "linked_door" || id == "timed_switch" || id == "timed_door";
     }
     return true;
@@ -123,13 +126,13 @@ void TitleScene::InitializeStageSelect()
     createSprite("stage_select.png", 0);
     for (size_t index = 0; index < stageLabels_.size(); ++index) { // 左側のステージ一覧
         stageLabels_[index] = createSprite("stage_select.png", static_cast<int>(index + 1));
-        stageStatuses_[index] = createSprite("stage_select.png", 5);
+        stageStatuses_[index] = createSprite("stage_select.png", 6);
     }
-    stageBack_ = createSprite("stage_select.png", 4);
+    stageBack_ = createSprite("stage_select.png", 5);
     stageDetail_ = createSprite(GameApp::kStageDetailTextures[0], -1);
     stageCursor_ = createSprite(nullptr, -1);
     stageCursor_->SetColor(kStageSelectAccent);
-    stagePreviewError_ = createSprite("stage_select.png", 7);
+    stagePreviewError_ = createSprite("stage_select.png", 8);
     stagePreviewEdges_ = createSprite("stage_preview_edges.png", -1);
     stagePreviewEdges_->SetColor(kStageSelectBackground);
     for (Sprite*& rule : stageSelectRules_) { // 背景へ控えめに引く区切り線
@@ -164,13 +167,14 @@ void TitleScene::InitializeStagePreviews()
     JsonDocument root; // プレビューと実プレイで共用するステージJSON
     TraceShiftStageJson::StageData data; // 検証済みのステージ配置
     std::string error; // 読み込みまたは検証の失敗理由
-    const std::string path = LevelWriter::ResolveWritableLevelPath("levels/trace_shift_stage.json"); // プレイ側と同じ配置ファイルの解決先
-    if (!JsonFileLoader::Load(path, root, nullptr, ResourceResolver::Type::Json, &error) ||
-        !TraceShiftStageJson::Decode(root, data, error)) {
-        Logger::Warn("StageSelect preview: " + error + "\n");
-        return;
-    }
     for (size_t index = 0; index < stagePreviews_.size(); ++index) { // ルートごとに生成するプレビュー
+        const auto& stage = GameApp::kSelectableStages[index]; // 実プレイと共有する配置ファイルと使用ルート
+        const std::string path = LevelWriter::ResolveWritableLevelPath(stage.fileName); // 選択ステージの配置ファイル
+        if (!JsonFileLoader::Load(path, root, nullptr, ResourceResolver::Type::Json, &error) ||
+            !TraceShiftStageJson::Decode(root, data, error)) {
+            Logger::Warn("StageSelect preview: " + error + "\n");
+            continue;
+        }
         /// <summary>実配置のブロックをプレビュー用の所有一覧へ追加する。</summary>
         const auto append = [this, index](const Vector3& scale, const Vector3& rotate, const Vector3& translate, const Vector4& color) {
             auto object = std::make_unique<Object3d>(); // 実配置を縮尺変更せず表示するオブジェクト
@@ -185,7 +189,10 @@ void TitleScene::InitializeStagePreviews()
             stagePreviews_[index].push_back(std::move(object));
         };
         for (const auto& block : data.blocks) { // 選択ルートに属する固定地形
-            if ((block.routeMask & (1u << index)) != 0) {
+            if (block.goalMarker && !stage.allowCompletion) {
+                continue;
+            }
+            if ((block.routeMask & stage.routeMask) != 0) {
                 append(block.scale, block.rotate, block.translate, block.color);
             }
         }
@@ -294,8 +301,8 @@ void TitleScene::UpdateStageSelect(float dt)
         stageLabels_[index]->SetPosition({ contentLeft, rowY });
         stageLabels_[index]->SetSize({ textWidth, textWidth / 12.0f });
         stageLabels_[index]->SetColor(selectedStageItem_ == index ? kStageSelectActiveText : kStageSelectIdleText);
-        const float statusRow = rowLocked ? 8.0f
-            : (stageSelection_->cleared[index] ? 6.0f : 5.0f); // プレビュー専用または攻略状態の表示行
+        const float statusRow = rowLocked ? 9.0f
+            : (stageSelection_->cleared[index] ? 7.0f : 6.0f); // プレビュー専用または攻略状態の表示行
         stageStatuses_[index]->SetTextureLeftTop({ 0.0f, statusRow * kStageAtlasRowHeight });
         stageStatuses_[index]->SetPosition({ contentLeft, rowY + height * 0.045f });
         stageStatuses_[index]->SetSize({ textWidth * 0.65f, textWidth * 0.65f / 12.0f });

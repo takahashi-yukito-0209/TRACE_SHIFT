@@ -1358,7 +1358,7 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
     if (pastSelfTutorialAutoCameraFollow_) {
         std::vector<PlayerState> visibleCloneStates = pastSelfCloneManager_.GetVisibleStates(); // カメラ範囲に含める可視分身状態一覧
         PlayerState cameraPlayerState = player_.GetState(); // 描画対象の位置を変えないカメラ計算専用の本体状態
-        if (HasHazardAreasForCurrentRoute()) {
+        if (!IsPastSelfTutorialCompletionEnabled()) {
             constexpr float kFallCameraMinimumY = -2.0f; // 通路を残しつつ失敗確定時の本体も見せる注視対象の下限
             cameraPlayerState.transform.translate.y = (std::max)(cameraPlayerState.transform.translate.y, kFallCameraMinimumY);
             for (auto& cloneState : visibleCloneStates) { // 深い落下を追わないカメラ計算専用の分身状態
@@ -1701,6 +1701,14 @@ void PlayScene::UpdateClonePlatformCourse()
 /// </summary>
 Math::Vector3 PlayScene::GetPastSelfTutorialRouteCameraTarget(const PlayerState& playerState) const
 {
+    if (!IsPastSelfTutorialCompletionEnabled()) {
+        for (size_t index = 0; index < pastSelfTutorialStageBlocks_.size(); ++index) { // クリアを使わないステージの注視対象
+            if (IsPastSelfTutorialStageBlockEnabled(index) && pastSelfTutorialStageBlocks_[index].hazard) {
+                return pastSelfTutorialStageBlocks_[index].collider.center;
+            }
+        }
+        return playerState.transform.translate;
+    }
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
         const PastSelfTutorialStageBlock* goal = GetClonePlatformCourseGoal(); // 現在区間だけを収める注視対象
         if (goal) {
@@ -1735,6 +1743,9 @@ void PlayScene::DrawPastSelfTutorialStage()
             continue;
         }
         PastSelfTutorialStageBlock& stageBlock = pastSelfTutorialStageBlocks_[blockIndex]; // 描画対象のチュートリアルステージブロック
+        if (stageBlock.goalMarker && !IsPastSelfTutorialCompletionEnabled()) {
+            continue;
+        }
         if (stageBlock.object) {
             if (stageBlock.hazard) {
                 DrawObjectWithAlphaBlend(stageBlock.object.get());
@@ -1808,7 +1819,7 @@ void PlayScene::AppendPastSelfTutorialSolidColliders(std::vector<SolidCollider>*
 /// </summary>
 void PlayScene::UpdatePastSelfTutorialGoal()
 {
-    if (pastSelfTutorialRoute_ != PastSelfTutorialRoute::FinalChallenge ||
+    if (!IsPastSelfTutorialCompletionEnabled() || pastSelfTutorialRoute_ != PastSelfTutorialRoute::FinalChallenge ||
         pastSelfTutorialState_.gimmicks.goalReached || pastSelfRecorder_.IsRecording()) {
         return;
     }
@@ -2021,7 +2032,14 @@ void PlayScene::DrawPastSelfTutorialRouteSelector()
 void PlayScene::SelectPastSelfTutorialRoute(PastSelfTutorialRoute route)
 {
     if (stageSelection_) {
-        stageSelection_->selectedStageIndex = static_cast<size_t>(route);
+        const uint32_t routeMask = 1u << static_cast<uint32_t>(route); // 選んだ既存ルートに対応する配置フラグ
+        for (size_t index = 0; index < GameApp::kSelectableStages.size(); ++index) { // 配置とルートが一致する選択番号
+            const auto& stage = GameApp::kSelectableStages[index]; // 危険エリアと総合課題を区別する選択情報
+            if (pastSelfTutorialStageFileName_ == stage.fileName && routeMask == stage.routeMask) {
+                stageSelection_->selectedStageIndex = index;
+                break;
+            }
+        }
     }
     if (pastSelfTutorialRoute_ == route) {
         return;
@@ -2049,10 +2067,24 @@ void PlayScene::SelectPastSelfTutorialRoute(PastSelfTutorialRoute route)
 /// </summary>
 bool PlayScene::HandleStageCompletion()
 {
-    if (!ctx_.requestSceneChange || !IsPastSelfTutorialSelectedRouteComplete()) {
+    if (!IsPastSelfTutorialCompletionEnabled() || !ctx_.requestSceneChange || !IsPastSelfTutorialSelectedRouteComplete()) {
         return false;
     }
     ctx_.requestSceneChange("Title");
+    return true;
+}
+
+/// <summary>
+/// 現在の配置ファイルとルートでゴール・クリアを有効にするか確認する。
+/// </summary>
+bool PlayScene::IsPastSelfTutorialCompletionEnabled() const
+{
+    const uint32_t routeMask = 1u << static_cast<uint32_t>(pastSelfTutorialRoute_); // 現在の攻略ルートの配置フラグ
+    for (const auto& stage : GameApp::kSelectableStages) { // 配置ファイルと使用ルートを共に照合する選択情報
+        if (pastSelfTutorialStageFileName_ == stage.fileName && routeMask == stage.routeMask) {
+            return stage.allowCompletion;
+        }
+    }
     return true;
 }
 
@@ -2121,6 +2153,9 @@ const char* PlayScene::GetPastSelfTutorialRouteLabel() const
 /// </summary>
 bool PlayScene::IsPastSelfTutorialSelectedRouteComplete() const
 {
+    if (!IsPastSelfTutorialCompletionEnabled()) {
+        return false;
+    }
     switch (pastSelfTutorialRoute_) {
     case PastSelfTutorialRoute::OneCloneBasics:
         return pastSelfTutorialState_.replay.oneCloneBasicsComplete;
