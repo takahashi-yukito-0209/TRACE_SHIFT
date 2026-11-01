@@ -677,6 +677,9 @@
     <ClInclude Include="application\gimmicks\StageGimmicks.h">
       <Filter>ヘッダー ファイル\application\gimmicks</Filter>
     </ClInclude>
+    <ClInclude Include="application\gimmicks\HazardAreaUtility.h">
+      <Filter>ヘッダー ファイル\application\gimmicks</Filter>
+    </ClInclude>
     <ClInclude Include="application\gimmicks\StageGimmickTransformUtility.h">
       <Filter>ヘッダー ファイル\application\gimmicks</Filter>
     </ClInclude>

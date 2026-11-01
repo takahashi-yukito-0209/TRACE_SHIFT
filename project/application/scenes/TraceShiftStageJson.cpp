@@ -74,6 +74,7 @@ bool TraceShiftStageJson::Decode(const nlohmann::json& root, StageData& data, st
             || !ReadOptionalBool(object, "collidable", block.collidable)
             || !ReadOptionalBool(object, "one_clone_goal_platform", block.oneCloneGoalPlatform)
             || !ReadOptionalBool(object, "goal_marker", block.goalMarker)
+            || !ReadOptionalBool(object, "hazard", block.hazard)
             || (object.contains("route_mask") && !JsonUtility::ExtractUint(object, "route_mask", block.routeMask))) {
             error = "Invalid block values at index " + std::to_string(index) + ".";
             return false;
@@ -90,6 +91,12 @@ bool TraceShiftStageJson::Decode(const nlohmann::json& root, StageData& data, st
     }
     size_t goalCount = 0; // ゴール表示に指定されたブロック数
     for (const BlockData& block : loaded.blocks) {
+        if (block.hazard && (block.collidable || block.goalMarker || block.oneCloneGoalPlatform
+            || block.scale.x <= 0.0f || block.scale.y <= 0.0f || block.scale.z <= 0.0f
+            || block.rotate.x != 0.0f || block.rotate.y != 0.0f || block.rotate.z != 0.0f)) {
+            error = "Hazard areas require positive scale, zero rotation, and no solid or goal flags.";
+            return false;
+        }
         if (block.goalMarker) {
             ++goalCount;
         }
@@ -154,6 +161,9 @@ nlohmann::json TraceShiftStageJson::Encode(const StageData& data)
             { "collidable", block.collidable }, { "one_clone_goal_platform", block.oneCloneGoalPlatform },
             { "goal_marker", block.goalMarker }, { "route_mask", block.routeMask },
         });
+        if (block.hazard) {
+            root["blocks"].back()["hazard"] = true;
+        }
     }
     for (const GimmickLayout& layout : data.gimmicks) {
         auto transform = WriteTransform(layout.scale, layout.rotate, layout.translate); // 出力するギミック配置

@@ -1,5 +1,6 @@
 #include "PlayScene.h"
 #include "PastSelfTutorialLayoutUtility.h"
+#include "../gimmicks/HazardAreaUtility.h"
 
 #include "ImGuiManager.h"
 #include "../../engine/3d/Camera.h"
@@ -550,7 +551,8 @@ bool PlayScene::LoadPastSelfTutorialStage()
     pastSelfTutorialStageBlocks_.clear();
     pastSelfTutorialStageBlocks_.reserve(loadedStage.blocks.size());
     for (const TraceShiftStageJson::BlockData& blockData : loadedStage.blocks) {
-        AppendPastSelfTutorialStageBlock(blockData.name, blockData.scale, blockData.rotate, blockData.translate, blockData.color, blockData.collidable, blockData.oneCloneGoalPlatform, blockData.goalMarker, blockData.routeMask);
+        const size_t blockIndex = AppendPastSelfTutorialStageBlock(blockData.name, blockData.scale, blockData.rotate, blockData.translate, blockData.color, blockData.collidable, blockData.oneCloneGoalPlatform, blockData.goalMarker, blockData.routeMask); // 読み込んだブロックの保存位置
+        pastSelfTutorialStageBlocks_[blockIndex].hazard = blockData.hazard;
     }
     pastSelfTutorialGimmickLayouts_ = std::move(loadedStage.gimmicks);
     pastSelfTutorialStageFileSucceeded_ = true;
@@ -605,6 +607,7 @@ bool PlayScene::SavePastSelfTutorialStage()
         block.collidable = stageBlock.collider.enabled;
         block.oneCloneGoalPlatform = stageBlock.oneCloneGoalPlatform;
         block.goalMarker = stageBlock.goalMarker;
+        block.hazard = stageBlock.hazard;
         block.routeMask = stageBlock.routeMask;
         stageData.blocks.push_back(std::move(block));
     }
@@ -767,7 +770,10 @@ size_t PlayScene::DuplicatePastSelfTutorialStageBlock(size_t blockIndex)
     }
     PastSelfTutorialStageBlock& sourceBlock = pastSelfTutorialStageBlocks_[blockIndex]; // 複製元のステージブロック
     const Math::Vector3 duplicatedTranslate = sourceBlock.object->GetTranslate() + Math::Vector3 { 0.5f, 0.5f, 0.0f }; // 元と重ならない複製座標
-    return AppendPastSelfTutorialStageBlock(sourceBlock.name + " Copy", sourceBlock.object->GetScale(), sourceBlock.object->GetRotate(), duplicatedTranslate, sourceBlock.baseColor, sourceBlock.collider.enabled, false, false, sourceBlock.routeMask);
+    const bool isHazard = sourceBlock.hazard; // 配列の再確保より前に保持する複製元の危険属性
+    const size_t duplicatedIndex = AppendPastSelfTutorialStageBlock(sourceBlock.name + " Copy", sourceBlock.object->GetScale(), sourceBlock.object->GetRotate(), duplicatedTranslate, sourceBlock.baseColor, sourceBlock.collider.enabled, false, false, sourceBlock.routeMask); // 生成した複製の番号
+    pastSelfTutorialStageBlocks_[duplicatedIndex].hazard = isHazard;
+    return duplicatedIndex;
 }
 
 /// <summary>
@@ -910,6 +916,10 @@ void PlayScene::InitializePastSelfTutorialMechanics()
 void PlayScene::UpdatePastSelfTutorialMechanics(float deltaTime)
 {
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
+        if (HasHazardAreasForCurrentRoute()) {
+            pastSelfTutorialSwitch_.Update(player_.GetState(), pastSelfCloneManager_.GetVisibleStates());
+            pastSelfTutorialState_.gimmicks.switchActive = pastSelfTutorialSwitch_.IsActive();
+        }
         return;
     }
     const PlayerState& playerState = player_.GetState(); // ギミック判定に使う現在のプレイヤー状態
@@ -1104,6 +1114,9 @@ void PlayScene::FinishPastSelfTutorialRecording()
 void PlayScene::UpdatePastSelfTutorialMechanicObjects(const Math::Matrix4x4& viewMatrix, const Math::Matrix4x4& projectionMatrix)
 {
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
+        if (HasHazardAreasForCurrentRoute()) {
+            pastSelfTutorialSwitch_.UpdateObject(viewMatrix, projectionMatrix);
+        }
         return;
     }
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::TwoCloneCooperation) {
@@ -1176,6 +1189,9 @@ void PlayScene::DrawPastSelfTutorialCloneRecordMarkers()
 void PlayScene::DrawPastSelfTutorialMechanics()
 {
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
+        if (HasHazardAreasForCurrentRoute()) {
+            pastSelfTutorialSwitch_.Draw();
+        }
         return;
     }
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::TwoCloneCooperation) {
@@ -1245,6 +1261,7 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
     }
 
     if (!selectedRouteComplete) {
+        const PlayerState previousPlayerState = player_.GetState(); // 足場追従を含む危険エリア接触判定の移動前状態
         pastSelfTutorialState_.progress.elapsedTime += deltaTime;
         const std::vector<StandablePlatform> previousClonePlatforms = BuildPlayerStandablePlatforms(pastSelfCloneManager_); // 更新前の分身足場
         pastSelfCloneManager_.Update(deltaTime, BuildCloneStandablePlatforms(player_));
@@ -1272,6 +1289,17 @@ void PlayScene::UpdatePastSelfTutorial(float deltaTime)
             break;
         }
         player_.Update(deltaTime, canAcceptInput, solidColliders, standablePlatforms);
+        UpdatePastSelfTutorialMechanics(0.0f);
+        float hazardContactFraction = 1.0f; // この移動区間で最初に危険エリアへ触れた割合
+        size_t hazardBlockIndex = 0; // 最初に接触して発光させる危険エリアの番号
+        if (TryGetHazardContact(previousPlayerState, hazardContactFraction, hazardBlockIndex)) {
+            const Math::Vector3 correction = (previousPlayerState.transform.translate - player_.GetState().transform.translate)
+                * (1.0f - hazardContactFraction); // 接触後に進んだ分だけ戻す補正量
+            player_.ApplyExternalTranslation(correction);
+            BeginStageFailurePresentation();
+            UpdatePastSelfTutorialVisuals();
+            return;
+        }
         UpdateClonePlatformCourse();
         const Math::Vector3 playerHalfSize = CalculatePlayerStateHalfSize(player_.GetState()); // 青扉通過判定に使うプレイヤー半サイズ
         const SolidCollider timedDoorCollider = pastSelfTutorialTimedDoor_.GetSolidCollider(); // 開閉によらず現在の青扉の判定範囲を取得する
@@ -1386,6 +1414,9 @@ void PlayScene::UpdatePastSelfTutorialStage(const Math::Matrix4x4& viewMatrix, c
                     goalColor.z += (1.0f - goalColor.z) * goalGlow;
                 }
                 stageBlock.object->SetMaterialColor(goalColor);
+            } else if (stageBlock.hazard) {
+                stageBlock.object->SetMaterialColor(HazardAreaUtility::CalculateColor(stageBlock.baseColor,
+                    pastSelfTutorialState_.gimmicks.switchActive, pastSelfTutorialState_.progress.elapsedTime));
             }
             stageBlock.object->Update(viewMatrix, projectionMatrix);
         }
@@ -1450,6 +1481,9 @@ void PlayScene::BuildPastSelfTutorialEditorObjects(std::vector<PastSelfTutorialE
     }; // 末尾へ追加された固定ブロックを編集一覧の最後へ配置する処理
 
     if (pastSelfTutorialRoute_ == PastSelfTutorialRoute::OneCloneBasics) {
+        if (HasHazardAreasForCurrentRoute()) {
+            appendGimmick(pastSelfTutorialSwitch_.GetEditorObject(), "Pressure Switch", PastSelfTutorialEditorObjectType::BoxSwitch);
+        }
         appendLastStageBlock();
         return;
     }
@@ -1637,7 +1671,11 @@ void PlayScene::DrawPastSelfTutorialStage()
         }
         PastSelfTutorialStageBlock& stageBlock = pastSelfTutorialStageBlocks_[blockIndex]; // 描画対象のチュートリアルステージブロック
         if (stageBlock.object) {
-            stageBlock.object->Draw();
+            if (stageBlock.hazard) {
+                DrawObjectWithAlphaBlend(stageBlock.object.get());
+            } else {
+                stageBlock.object->Draw();
+            }
         }
     }
 }
@@ -1951,6 +1989,50 @@ bool PlayScene::HandleStageCompletion()
     }
     ctx_.requestSceneChange("Title");
     return true;
+}
+
+/// <summary>
+/// 選択中ルートに危険エリアが配置されているか確認する。
+/// </summary>
+bool PlayScene::HasHazardAreasForCurrentRoute() const
+{
+    for (size_t index = 0; index < pastSelfTutorialStageBlocks_.size(); ++index) { // ルート内の危険属性を確認する番号
+        if (IsPastSelfTutorialStageBlockEnabled(index) && pastSelfTutorialStageBlocks_[index].hazard) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// <summary>
+/// 配置順によらず、本体が最初に接触する危険エリアの番号と移動割合を取得する。
+/// </summary>
+bool PlayScene::TryGetHazardContact(const PlayerState& previousState, float& contactFraction, size_t& blockIndex) const
+{
+    bool contacted = false; // 一つ以上の危険エリアへ接触したか
+    float earliestFraction = 1.0f; // 全エリアのうち最も早い接触割合
+    size_t earliestBlockIndex = 0; // 最初に接触した危険エリアの番号
+    for (size_t index = 0; index < pastSelfTutorialStageBlocks_.size(); ++index) { // 接触対象のブロック番号
+        const PastSelfTutorialStageBlock& block = pastSelfTutorialStageBlocks_[index]; // 表示と判定が共通の危険エリア
+        if (!block.hazard || !IsPastSelfTutorialStageBlockEnabled(index)) {
+            continue;
+        }
+        const SolidCollider area { block.collider.center, block.collider.halfSize, true }; // 地形衝突とは独立した危険範囲
+        float areaContactFraction = 1.0f; // この危険エリアへの接触割合
+        if (HazardAreaUtility::TryGetContactFraction(previousState, player_.GetState(), area,
+                pastSelfTutorialState_.gimmicks.switchActive, areaContactFraction)) {
+            if (!contacted || areaContactFraction < earliestFraction) {
+                earliestFraction = areaContactFraction;
+                earliestBlockIndex = index;
+            }
+            contacted = true;
+        }
+    }
+    if (contacted) {
+        contactFraction = earliestFraction;
+        blockIndex = earliestBlockIndex;
+    }
+    return contacted;
 }
 
 /// <summary>

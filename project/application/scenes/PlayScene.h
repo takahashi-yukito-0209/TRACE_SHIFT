@@ -208,6 +208,16 @@ private:
     bool HandleStageCompletion();
 
     /// <summary>
+    /// 選択中ルートに危険エリアが配置されているか確認する。
+    /// </summary>
+    bool HasHazardAreasForCurrentRoute() const;
+
+    /// <summary>
+    /// 本体が最初に接触する危険エリアの番号と移動割合を取得する。
+    /// </summary>
+    bool TryGetHazardContact(const PlayerState& previousState, float& contactFraction, size_t& blockIndex) const;
+
+    /// <summary>
     /// 開始時の文字をゲーム画面へ重ねる。
     /// </summary>
     void DrawStageSelectionOverlay();
@@ -223,6 +233,7 @@ private:
         uint32_t routeMask = 0; // このブロックを使用するチュートリアルルート
         bool oneCloneGoalPlatform = false; // 1体ルートの到達判定とクリア時の変色に使う床か
         bool goalMarker = false; // ゴール表示用のブロックか
+        bool hazard = false; // 通常スイッチで停止する危険エリアか
     };
 
     /// <summary>

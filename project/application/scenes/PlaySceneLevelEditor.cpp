@@ -142,6 +142,23 @@ void PlayScene::DrawPastSelfTutorialStageEditorImGui()
     }
 
     EditStringText("Stage File", pastSelfTutorialStageFileName_);
+    if (ImGui::Button("Load Hazard Trial")) {
+        pastSelfTutorialStageFileName_ = "levels/trace_shift_hazard_trial.json";
+        if (ReloadPastSelfTutorialStage()) {
+            SelectPastSelfTutorialRoute(PastSelfTutorialRoute::FinalChallenge);
+            BuildPastSelfTutorialEditorObjects(&editorObjects);
+            selectedObjectIndex = -1;
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load Main Stage")) {
+        pastSelfTutorialStageFileName_ = "levels/trace_shift_stage.json";
+        if (ReloadPastSelfTutorialStage()) {
+            SelectPastSelfTutorialRoute(PastSelfTutorialRoute::OneCloneBasics);
+            BuildPastSelfTutorialEditorObjects(&editorObjects);
+            selectedObjectIndex = -1;
+        }
+    }
     if (ImGui::Button("New Block")) {
         const size_t createdBlockIndex = CreatePastSelfTutorialStageBlock(); // 新規作成した固定ブロック番号
         selectStageBlock(createdBlockIndex);
@@ -228,7 +245,18 @@ void PlayScene::DrawPastSelfTutorialStageEditorImGui()
                 }
                 ImGui::SeparatorText("Stage Block");
                 EditStringText("Name", stageBlock.name);
+                ImGui::BeginDisabled(stageBlock.goalMarker || stageBlock.oneCloneGoalPlatform);
+                if (ImGui::Checkbox("Hazard Area", &stageBlock.hazard) && stageBlock.hazard) {
+                    stageBlock.collider.enabled = false;
+                }
+                ImGui::EndDisabled();
+                if (stageBlock.hazard) {
+                    editorObject.object->SetRotate({});
+                    ImGui::TextDisabled("Axis-aligned hazard; green switch stops it.");
+                }
+                ImGui::BeginDisabled(stageBlock.hazard);
                 ImGui::Checkbox("Collidable", &stageBlock.collider.enabled);
+                ImGui::EndDisabled();
                 bool useOneCloneRoute = (stageBlock.routeMask & kOneCloneRouteMask) != 0; // 1体ルートで使用するか
                 bool useTwoCloneRoute = (stageBlock.routeMask & kTwoCloneRouteMask) != 0; // 2体ルートで使用するか
                 bool useFinalRoute = (stageBlock.routeMask & kFinalRouteMask) != 0; // 最終ルートで使用するか

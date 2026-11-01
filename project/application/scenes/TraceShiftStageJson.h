@@ -30,6 +30,7 @@ struct BlockData {
     bool collidable = true; // 地形衝突を有効にするか
     bool oneCloneGoalPlatform = false; // 1体ルートの到達床か
     bool goalMarker = false; // ゴール表示か
+    bool hazard = false; // 通常スイッチで停止する本体専用の危険エリアか
 };
 
 struct GimmickLayout {
